@@ -1,56 +1,22 @@
 package main
 
 import (
-	"log"
-	"net"
 	"time"
-
-	"github.com/LiamHaworth/go-tproxy"
 )
 
-const ListenAddr = "127.127.127.127:127"
-const MaxLookahead = 4096
-const MaxIdentifyTime = time.Second
+const DNSAdminEmail = "Jon@9072997.com"
+const DNSTTL = 300
+const DNSZone = "withfallback.com."
+const MappedPrefix = "2600:3c00:e000:03f5::"
 const MaxConnectTime = 5 * time.Second
+const MaxIdentifyTime = time.Second
+const MaxLookahead = 4096
 const MaxLookupTime = 2 * time.Second
-const MappedPrefix = "ffff::"
+const ProxyListenAddr = "127.127.127.127:127"
+const PublicIPv4Addr = "45.33.22.33"
+const PublicIPv6Addr = "2600:3c00::f03c:92ff:fe4c:684a"
 
 func main() {
-	listenAddr := net.ParseIP(ListenAddr)
-	if listenAddr == nil {
-		panic("failed to parse listen address")
-	}
-
-	listener, err := tproxy.ListenTCP("tcp", listenAddr)
-	if err != nil {
-		panic(err)
-	}
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		go handle(NewConn(conn))
-	}
-}
-
-func handle(c Conn) {
-	if !c.ClientIsIPv4() {
-		log.Print("Dropping IPv4 Client:", c.RemoteAddr().String())
-		c.Close()
-		return
-	}
-
-	backend, err := c.DialBackend()
-	if err != nil {
-		log.Print(err)
-		c.Close()
-		return
-	}
-
-	// this will block as long as the connection is open. When it closes it
-	// will close both ends of the connection.
-	c.Connect(backend)
+	go ServeDNS()
+	Proxy()
 }

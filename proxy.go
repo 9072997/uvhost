@@ -1,0 +1,68 @@
+package main
+
+import (
+	"log"
+	"net"
+	"strconv"
+
+	tproxy "github.com/LiamHaworth/go-tproxy"
+)
+
+func Proxy() {
+	listenAddr := parseAddr(ProxyListenAddr)
+	if listenAddr == nil {
+		panic("failed to parse listen address")
+	}
+
+	listener, err := tproxy.ListenTCP("tcp", listenAddr)
+	if err != nil {
+		panic(err)
+	}
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		go handle(NewConn(conn.(*tproxy.Conn).TCPConn))
+	}
+}
+
+func handle(c Conn) {
+	if c.ClientIsIPv6() {
+		log.Print("Dropping IPv6 Client:", c.RemoteAddr().String())
+		c.Close()
+		return
+	}
+
+	backend, err := c.DialBackend()
+	if err != nil {
+		log.Print(err)
+		c.Close()
+		return
+	}
+
+	// this will block as long as the connection is open. When it closes it
+	// will close both ends of the connection.
+	c.Connect(backend)
+}
+
+func parseAddr(addrStr string) *net.TCPAddr {
+	ipStr, portStr, err := net.SplitHostPort(addrStr)
+	if err != nil {
+		return nil
+	}
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return nil
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil
+	}
+	return &net.TCPAddr{
+		IP:   ip,
+		Port: port,
+	}
+}

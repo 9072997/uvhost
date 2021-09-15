@@ -81,9 +81,9 @@ func (c *Conn) Connect(backendConn *net.TCPConn) {
 	wg.Wait()
 }
 
-func (c Conn) ClientIsIPv4() bool {
+func (c Conn) ClientIsIPv6() bool {
 	srcIP := c.RemoteAddr().(*net.TCPAddr).IP
-	return len(srcIP) == 4
+	return srcIP.To4() == nil
 }
 
 func (c *Conn) identifyHost() (host string, err error) {
