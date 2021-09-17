@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net"
 	"strconv"
 
@@ -22,7 +21,7 @@ func Proxy() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Print(err)
+			Log(err)
 			continue
 		}
 		go handle(NewConn(conn.(*tproxy.Conn).TCPConn))
@@ -31,14 +30,13 @@ func Proxy() {
 
 func handle(c Conn) {
 	if c.ClientIsIPv6() {
-		log.Print("Dropping IPv6 Client:", c.RemoteAddr().String())
+		c.Log("dropping IPv6 Client:", c.RemoteAddr().String())
 		c.Close()
 		return
 	}
 
 	backend, err := c.DialBackend()
 	if err != nil {
-		log.Print(err)
 		c.Close()
 		return
 	}
