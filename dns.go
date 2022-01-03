@@ -31,7 +31,7 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 	case dns.OpcodeQuery:
 		for _, q := range m.Question {
 			host := strings.SplitN(q.Name, ".", 2)[0]
-			host = strings.ReplaceAll(host, "_", ":")
+			host = strings.ReplaceAll(host, "-", ":")
 			ip := parseIPv6(host)
 			if ip == nil {
 				if strings.ContainsAny(host, ":") {
