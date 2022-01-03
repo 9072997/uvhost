@@ -68,6 +68,18 @@ func answer(
 	isRoot bool,
 ) {
 	switch question.Qtype {
+	case dns.TypeMX:
+		// loopback MX records
+		out.Answer = append(out.Answer, &dns.MX{
+			Hdr: dns.RR_Header{
+				Name:   question.Name,
+				Rrtype: dns.TypeMX,
+				Class:  dns.ClassINET,
+				Ttl:    DNSTTL,
+			},
+			Mx:         question.Name,
+			Preference: 10,
+		})
 	case dns.TypeA:
 		out.Answer = append(out.Answer, &dns.A{
 			Hdr: dns.RR_Header{
