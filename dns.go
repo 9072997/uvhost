@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"regexp"
 	"strings"
 
 	"github.com/miekg/dns"
@@ -30,21 +31,16 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 	switch req.Opcode {
 	case dns.OpcodeQuery:
 		for _, q := range m.Question {
-			host := strings.SplitN(q.Name, ".", 2)[0]
-			host = strings.ReplaceAll(host, "-", ":")
-			ip := parseIPv6(host)
+			ip := ipV6Extract(q.Name)
 			if ip == nil {
-				if strings.ContainsAny(host, ":") {
-					// the user probably mis-formatted an IP
-					m.SetRcode(req, dns.RcodeNameError)
-				} else if eq(host, "ns1") || eq(host, "ns2") {
+				if eq(q.Name, "ns1."+DNSZone) || eq(q.Name, "ns2."+DNSZone) {
 					// respond with our own IPs
 					answer(m, q,
 						parseIPv4OrPanic(PublicIPv4Addr),
 						parseIPv6OrPanic(PublicIPv6Addr),
 						false,
 					)
-				} else {
+				} else if eq(q.Name, DNSZone) {
 					// assume this is a domain root
 					// answer as ourselves and include SOA and NS records
 					answer(m, q,
@@ -52,6 +48,8 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 						parseIPv6OrPanic(PublicIPv6Addr),
 						true,
 					)
+				} else {
+					m.SetRcode(req, dns.RcodeNameError)
 				}
 			} else {
 				// we got a valid IPv6 address as the hostname
@@ -171,8 +169,26 @@ func answer(
 	}
 }
 
-func parseIPv6(s string) net.IP {
-	ip := net.ParseIP(s)
+var rIPv6Subdomain = regexp.MustCompile(`(?i)^(?:[0-9a-f]{4}-){7}[0-9a-f]{4}$`)
+
+// extract an ipv6 address from a DNS query name
+func ipV6Extract(q string) net.IP {
+	if !strings.HasSuffix(q, "."+DNSZone) {
+		return nil
+	}
+	q = strings.TrimSuffix(q, "."+DNSZone)
+
+	parts := strings.Split(q, ".")
+	if len(parts) == 0 {
+		return nil
+	}
+
+	ipPart := parts[len(parts)-1]
+	if !rIPv6Subdomain.MatchString(ipPart) {
+		return nil
+	}
+
+	ip := net.ParseIP(strings.ReplaceAll(ipPart, "-", ":"))
 	if ip.To4() != nil {
 		return nil
 	}
