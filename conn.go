@@ -69,10 +69,12 @@ func (c *Conn) DialBackend() (*net.TCPConn, error) {
 		Port: c.LocalAddr().(*net.TCPAddr).Port,
 	}
 	c.Log("dialing backend:", c.mappedAddr(), "->", backendAddr)
-	backendConn, err := net.DialTCP(
+	backendConn, err := (&net.Dialer{
+		Timeout:   MaxConnectTime,
+		LocalAddr: c.mappedAddr(),
+	}).Dial(
 		"tcp6",
-		c.mappedAddr(),
-		backendAddr,
+		backendAddr.String(),
 	)
 	if err != nil {
 		c.Log(err)
@@ -80,7 +82,7 @@ func (c *Conn) DialBackend() (*net.TCPConn, error) {
 	}
 
 	c.Log("backend connection established")
-	return backendConn, nil
+	return backendConn.(*net.TCPConn), nil
 }
 
 func (c *Conn) Connect(backendConn *net.TCPConn) {
