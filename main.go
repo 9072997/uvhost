@@ -19,5 +19,6 @@ const LogAsStringCutoff = 0.80
 
 func main() {
 	go ServeDNS()
+	go ServeInfo()
 	Proxy()
 }

@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/LiamHaworth/go-tproxy v0.0.0-20190726054950-ef7efd7f24ed
+	github.com/gomarkdown/markdown v0.0.0-20211212230626-5af6ad2f47df
 	github.com/miekg/dns v1.1.45
 )
 
