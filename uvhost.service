@@ -1,0 +1,13 @@
+[Unit]
+Description=universal virtual host
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStartPre=/usr/local/bin/uvhost-netsetup.sh
+ExecStart=/usr/local/bin/uvhost
+
+[Install]
+WantedBy=multi-user.target
