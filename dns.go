@@ -11,17 +11,26 @@ import (
 // just to shorten things
 var eq = strings.EqualFold
 
-func ServeDNS() {
+func StartDNS() {
 	// attach request handler func
 	dns.HandleFunc(DNSZone, handleDnsRequest)
 
-	// start server
-	server := &dns.Server{
-		Addr: ":53",
-		Net:  "udp",
-	}
-	err := server.ListenAndServe()
-	panic(err)
+	go func() {
+		udpServer := &dns.Server{
+			Addr: net.JoinHostPort(PublicIPv6Addr, "53"),
+			Net:  "udp",
+		}
+		err := udpServer.ListenAndServe()
+		panic(err)
+	}()
+	go func() {
+		udpServer := &dns.Server{
+			Addr: net.JoinHostPort(PublicIPv6Addr, "53"),
+			Net:  "tcp",
+		}
+		err := udpServer.ListenAndServe()
+		panic(err)
+	}()
 }
 
 func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
@@ -34,14 +43,13 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 			ip := ipV6Extract(q.Name)
 			if ip == nil {
 				if eq(q.Name, "ns1."+DNSZone) || eq(q.Name, "ns2."+DNSZone) {
-					// respond with our own IPs
+					// respond with our IPv6 address
 					answer(m, q,
-						parseIPv4OrPanic(PublicIPv4Addr),
+						nil,
 						parseIPv6OrPanic(PublicIPv6Addr),
 						false,
 					)
 				} else if eq(q.Name, DNSZone) {
-					// assume this is a domain root
 					// answer as ourselves and include SOA and NS records
 					answer(m, q,
 						parseIPv4OrPanic(PublicIPv4Addr),
@@ -81,6 +89,9 @@ func answer(
 			Preference: 10,
 		})
 	case dns.TypeA:
+		if ipv4 == nil {
+			break
+		}
 		out.Answer = append(out.Answer, &dns.A{
 			Hdr: dns.RR_Header{
 				Name:   question.Name,
@@ -91,6 +102,9 @@ func answer(
 			A: ipv4,
 		})
 	case dns.TypeAAAA:
+		if ipv6 == nil {
+			break
+		}
 		out.Answer = append(out.Answer, &dns.AAAA{
 			Hdr: dns.RR_Header{
 				Name:   question.Name,
@@ -122,16 +136,7 @@ func answer(
 			},
 			Ns: "ns2." + question.Name,
 		})
-		// and this is where this domain is
-		out.Extra = append(out.Extra, &dns.A{
-			Hdr: dns.RR_Header{
-				Name:   "ns1." + question.Name,
-				Rrtype: dns.TypeA,
-				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
-			},
-			A: ipv4,
-		})
+		// and this is where that domain is
 		out.Extra = append(out.Extra, &dns.AAAA{
 			Hdr: dns.RR_Header{
 				Name:   "ns1." + question.Name,
@@ -140,15 +145,6 @@ func answer(
 				Ttl:    DNSTTL,
 			},
 			AAAA: ipv6,
-		})
-		out.Extra = append(out.Extra, &dns.A{
-			Hdr: dns.RR_Header{
-				Name:   "ns2." + question.Name,
-				Rrtype: dns.TypeA,
-				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
-			},
-			A: ipv4,
 		})
 		out.Extra = append(out.Extra, &dns.AAAA{
 			Hdr: dns.RR_Header{

@@ -18,7 +18,7 @@ const PublicIPv6Addr = "2600:3c00::f03c:92ff:fe4c:684a"
 const LogAsStringCutoff = 0.80
 
 func main() {
-	go ServeDNS()
+	StartDNS()
 	go ServeInfo()
 	Proxy()
 }
