@@ -20,7 +20,8 @@ var readmeMD []byte
 
 func ServeInfo() {
 	readmeHTML := markdown.ToHTML(readmeMD, nil, nil)
-	http.Handle("/", staticHTML(readmeHTML))
+	mux := http.NewServeMux()
+	mux.Handle("/", staticHTML(readmeHTML))
 	listenAddr := fmt.Sprintf("[%s]:http", PublicIPv6Addr)
-	http.ListenAndServe(listenAddr, nil)
+	http.ListenAndServe(listenAddr, mux)
 }

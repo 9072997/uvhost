@@ -12,23 +12,25 @@ import (
 var eq = strings.EqualFold
 
 func StartDNS() {
+	mux := dns.NewServeMux()
+
 	// attach request handler func
-	dns.HandleFunc(DNSZone, handleDnsRequest)
+	mux.HandleFunc(DNSZone, handleDnsRequest)
 
 	go func() {
-		udpServer := &dns.Server{
-			Addr: net.JoinHostPort(PublicIPv6Addr, "53"),
-			Net:  "udp",
-		}
-		err := udpServer.ListenAndServe()
+		err := (&dns.Server{
+			Addr:    net.JoinHostPort(PublicIPv6Addr, "53"),
+			Net:     "udp",
+			Handler: mux,
+		}).ListenAndServe()
 		panic(err)
 	}()
 	go func() {
-		udpServer := &dns.Server{
-			Addr: net.JoinHostPort(PublicIPv6Addr, "53"),
-			Net:  "tcp",
-		}
-		err := udpServer.ListenAndServe()
+		err := (&dns.Server{
+			Addr:    net.JoinHostPort(PublicIPv6Addr, "53"),
+			Net:     "tcp",
+			Handler: mux,
+		}).ListenAndServe()
 		panic(err)
 	}()
 }
