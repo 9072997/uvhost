@@ -183,10 +183,13 @@ var rIPv6Subdomain = regexp.MustCompile(`(?i)^(?:[0-9a-f]{4}-){7}[0-9a-f]{4}$`)
 
 // extract an ipv6 address from a DNS query name
 func ipV6Extract(q string) net.IP {
-	if !strings.HasSuffix(q, "."+DNSZone) {
+	q = strings.ToLower(q)
+	suffix := "." + strings.ToLower(DNSZone)
+
+	if !strings.HasSuffix(q, suffix) {
 		return nil
 	}
-	q = strings.TrimSuffix(q, "."+DNSZone)
+	q = strings.TrimSuffix(q, suffix)
 
 	parts := strings.Split(q, ".")
 	if len(parts) == 0 {
