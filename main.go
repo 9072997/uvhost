@@ -7,6 +7,7 @@ import (
 const DNSAdminEmail = "Jon@9072997.com"
 const DNSTTL = 300
 const DNSZone = "withfallback.com."
+const DNSPassthroughTimeout = 500 * time.Millisecond
 const MappedPrefix = "2600:3c00:e000:03f5::"
 const MaxConnectTime = 5 * time.Second
 const MaxIdentifyTime = time.Second

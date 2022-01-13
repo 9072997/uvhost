@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"net"
 	"regexp"
 	"strings"
@@ -68,6 +70,7 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 		}
 	}
 
+	Log(m)
 	resp.WriteMsg(m)
 }
 
@@ -77,6 +80,16 @@ func answer(
 	ipv4, ipv6 net.IP,
 	isRoot bool,
 ) {
+	// for servers other than ourselves
+	if !parseIPv6OrPanic(PublicIPv6Addr).Equal(ipv6) {
+		// MX, A, AAAA, and TXT records may be overridden by the backend
+		pr := proxyRecords(ipv6, question)
+		if pr != nil {
+			out.Answer = append(out.Answer, pr...)
+			return
+		}
+	}
+
 	switch question.Qtype {
 	case dns.TypeMX:
 		// loopback MX records
@@ -225,4 +238,87 @@ func parseIPv4OrPanic(s string) net.IP {
 		panic("failed to parse IPv4 address")
 	}
 	return ip
+}
+
+func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		DNSPassthroughTimeout,
+	)
+	defer cancel()
+
+	backend := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{
+				Timeout: DNSPassthroughTimeout,
+			}
+			return d.DialContext(
+				ctx,
+				network,
+				fmt.Sprintf("[%s]:53", dnsServer),
+			)
+		},
+	}
+
+	switch question.Qtype {
+	case dns.TypeMX:
+		backendRecords, _ := backend.LookupMX(ctx, question.Name)
+		for _, backendRecord := range backendRecords {
+			r = append(r, &dns.MX{
+				Hdr: dns.RR_Header{
+					Name:   question.Name,
+					Rrtype: dns.TypeMX,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				Mx:         backendRecord.Host,
+				Preference: backendRecord.Pref,
+			})
+		}
+	case dns.TypeA:
+		backendRecords, _ := backend.LookupIP(ctx, "ip4", question.Name)
+		for _, backendRecord := range backendRecords {
+			r = append(r, &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   question.Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				A: backendRecord,
+			})
+		}
+	case dns.TypeAAAA:
+		backendRecords, _ := backend.LookupIP(ctx, "ip6", question.Name)
+		for _, backendRecord := range backendRecords {
+			r = append(r, &dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name:   question.Name,
+					Rrtype: dns.TypeAAAA,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				AAAA: backendRecord,
+			})
+		}
+	case dns.TypeTXT:
+		backendRecords, _ := backend.LookupTXT(ctx, question.Name)
+		if len(backendRecords) == 0 {
+			return nil
+		}
+		r = []dns.RR{
+			&dns.TXT{
+				Hdr: dns.RR_Header{
+					Name:   question.Name,
+					Rrtype: dns.TypeTXT,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				Txt: backendRecords,
+			},
+		}
+	}
+
+	return r
 }
