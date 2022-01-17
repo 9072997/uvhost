@@ -70,7 +70,11 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 		}
 	}
 
-	Log(m)
+	logMsg := m.String()
+	logMsg = strings.ReplaceAll(logMsg, "\n\n", "\n")
+	logMsg = strings.TrimSuffix(logMsg, "\n")
+	Log(logMsg)
+
 	resp.WriteMsg(m)
 }
 
