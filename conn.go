@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -21,11 +20,14 @@ type Conn struct {
 	preview        [MaxLookahead]byte
 	previewPointer int
 	eater          func(io.Reader) (int, error)
-	logs           []string
+
+	Log      func(...interface{})
+	printLog func()
 }
 
 func NewConn(tcpConn *net.TCPConn) Conn {
 	c := Conn{TCPConn: tcpConn}
+	c.Log, c.printLog = NewLog()
 	c.Log(
 		"incoming connection:",
 		c.TCPConn.RemoteAddr(),
@@ -35,20 +37,10 @@ func NewConn(tcpConn *net.TCPConn) Conn {
 	return c
 }
 
-func (c *Conn) Log(is ...interface{}) {
-	var ss []string
-	for _, i := range is {
-		ss = append(ss, Stringify(i))
-	}
-	c.logs = append(c.logs, strings.Join(ss, " "))
-}
-
 func (c *Conn) Close(i ...interface{}) {
 	c.Log("closing client side connection")
 
-	// flush logs
-	LogPrinter <- c.logs
-	c.logs = nil
+	c.printLog()
 
 	c.TCPConn.Close()
 	c.TCPConn = nil

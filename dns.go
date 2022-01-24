@@ -17,7 +17,7 @@ func StartDNS() {
 	mux := dns.NewServeMux()
 
 	// attach request handler func
-	mux.HandleFunc(DNSZone, handleDnsRequest)
+	mux.HandleFunc(DNSZone, HandleMainZone)
 
 	go func() {
 		err := (&dns.Server{
@@ -37,19 +37,18 @@ func StartDNS() {
 	}()
 }
 
-func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
+func HandleMainZone(resp dns.ResponseWriter, req *dns.Msg) {
 	m := new(dns.Msg).SetReply(req)
 	m.Authoritative = true
 
-	switch req.Opcode {
-	case dns.OpcodeQuery:
+	if req.Opcode == dns.OpcodeQuery {
 		for _, q := range m.Question {
-			ip := ipV6Extract(q.Name)
+			ip := IPv6Extract(q.Name)
 			if ip == nil {
 				if eq(q.Name, "ns1."+DNSZone) || eq(q.Name, "ns2."+DNSZone) {
-					// respond with our IPv6 address
+					// respond with our addresses
 					answer(m, q,
-						nil,
+						parseIPv4OrPanic(PublicIPv4Addr),
 						parseIPv6OrPanic(PublicIPv6Addr),
 						false,
 					)
@@ -68,13 +67,11 @@ func handleDnsRequest(resp dns.ResponseWriter, req *dns.Msg) {
 				answer(m, q, parseIPv4OrPanic(PublicIPv4Addr), ip, false)
 			}
 		}
+	} else {
+		m.SetRcode(req, dns.RcodeServerFailure)
 	}
 
-	logMsg := m.String()
-	logMsg = strings.ReplaceAll(logMsg, "\n\n", "\n")
-	logMsg = strings.TrimSuffix(logMsg, "\n")
-	Log(logMsg)
-
+	Log(FormatDNS(*m))
 	resp.WriteMsg(m)
 }
 
@@ -156,24 +153,46 @@ func answer(
 			Ns: "ns2." + question.Name,
 		})
 		// and this is where that domain is
-		out.Extra = append(out.Extra, &dns.AAAA{
-			Hdr: dns.RR_Header{
-				Name:   "ns1." + question.Name,
-				Rrtype: dns.TypeAAAA,
-				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
-			},
-			AAAA: ipv6,
-		})
-		out.Extra = append(out.Extra, &dns.AAAA{
-			Hdr: dns.RR_Header{
-				Name:   "ns2." + question.Name,
-				Rrtype: dns.TypeAAAA,
-				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
-			},
-			AAAA: ipv6,
-		})
+		if ipv4 != nil {
+			out.Extra = append(out.Extra, &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   "ns1." + question.Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				A: ipv4,
+			})
+			out.Extra = append(out.Extra, &dns.A{
+				Hdr: dns.RR_Header{
+					Name:   "ns2." + question.Name,
+					Rrtype: dns.TypeA,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				A: ipv4,
+			})
+		}
+		if ipv6 != nil {
+			out.Extra = append(out.Extra, &dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name:   "ns1." + question.Name,
+					Rrtype: dns.TypeAAAA,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				AAAA: ipv6,
+			})
+			out.Extra = append(out.Extra, &dns.AAAA{
+				Hdr: dns.RR_Header{
+					Name:   "ns2." + question.Name,
+					Rrtype: dns.TypeAAAA,
+					Class:  dns.ClassINET,
+					Ttl:    DNSTTL,
+				},
+				AAAA: ipv6,
+			})
+		}
 	case dns.TypeSOA:
 		if !isRoot {
 			break
@@ -199,7 +218,7 @@ func answer(
 var rIPv6Subdomain = regexp.MustCompile(`(?i)^(?:[0-9a-f]{4}-){7}[0-9a-f]{4}$`)
 
 // extract an ipv6 address from a DNS query name
-func ipV6Extract(q string) net.IP {
+func IPv6Extract(q string) net.IP {
 	q = strings.ToLower(q)
 	suffix := "." + strings.ToLower(DNSZone)
 
@@ -244,6 +263,7 @@ func parseIPv4OrPanic(s string) net.IP {
 	return ip
 }
 
+// BUG(jon): re-use proxy logic from recurse
 func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),

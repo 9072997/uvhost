@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
+
+	"github.com/miekg/dns"
 )
 
 var LogPrinter = StartLogPrinter()
@@ -58,4 +61,38 @@ func Stringify(ii interface{}) string {
 	default:
 		return fmt.Sprint(i)
 	}
+}
+
+// returns a new long function which will write its output all at once when
+// print() is called
+func NewLog() (log func(...interface{}), print func()) {
+	var logs []string
+	var mutex sync.Mutex
+
+	log = func(is ...interface{}) {
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		var ss []string
+		for _, i := range is {
+			ss = append(ss, Stringify(i))
+		}
+		logs = append(logs, strings.Join(ss, " "))
+	}
+
+	print = func() {
+		mutex.Lock()
+		defer mutex.Unlock()
+		LogPrinter <- logs
+		logs = nil
+	}
+
+	return
+}
+
+func FormatDNS(m dns.Msg) string {
+	s := m.String()
+	s = strings.ReplaceAll(s, "\n\n", "\n")
+	s = strings.TrimSuffix(s, "\n")
+	return s
 }
