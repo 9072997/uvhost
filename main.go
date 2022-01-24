@@ -11,6 +11,7 @@ const DNSPassthroughTimeout = 500 * time.Millisecond
 const RecurseMaxTTL = 60 * 60 * 24 // 1 day
 const RecurseMinTTL = 60           // 1 minute
 const RecurseConcurencyLimit = 2   // per eTLD+1
+const RecurseMaxDepth = 7
 const RecurseServer = "[2600:3c00::3]"
 const RecurseBufferSize = 1500
 const MappedPrefix = "2600:3c00:e000:03f5::"

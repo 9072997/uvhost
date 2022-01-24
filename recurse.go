@@ -16,8 +16,15 @@ import (
 )
 
 var ErrETLD1ConcurencyLimit = errors.New("eTLD+1 is already at its query concurency limit")
+var ErrNoETLDNS = errors.New("could not find eTLD nameserver")
+var ErrMaxDepthExceeded = errors.New("exceeded maximum recursion depth")
 var nsCache = expiremap.New() // used by lookupNS()
 var recursionLimiter sync.Map // used by authority()
+
+type nsResp struct {
+	ns            []string
+	authoritative bool
+}
 
 func StartRecurse() {
 	go serveRecurseMode("udp")
@@ -49,7 +56,7 @@ func lookupNS(
 	dnsServer string,
 	mode string,
 	log func(...interface{}),
-) (nameServers []string, err error) {
+) (nameServers []string, authoritative bool, err error) {
 	// short-circuit DNS resolution of the nameserver for *.withfallback.com
 	ip := IPv6Extract(dnsServer)
 	if ip != nil {
@@ -60,16 +67,21 @@ func lookupNS(
 	cacheKey := [2]string{host, dnsServer}
 	cacheEntry, inCache := nsCache.Get(cacheKey)
 	if inCache {
-		cacheEntry := cacheEntry.([]string)
+		cacheEntry := cacheEntry.(nsResp)
 		log(dnsServer+"[cache]>", host)
 		// there is a race condition here, but this is only used for logging
 		// so I don't care
 		ttl := nsCache.GetTTL(cacheKey) / int64(time.Second)
-		for _, nameServer := range cacheEntry {
-			log(fmt.Sprintf("NS: %s TTL=%d", nameServer, ttl))
+		for _, nameServer := range cacheEntry.ns {
+			log(fmt.Sprintf(
+				"NS: %s TTL=%d Authoritative=%t",
+				nameServer,
+				ttl,
+				cacheEntry.authoritative,
+			))
 		}
 
-		return cacheEntry, nil
+		return cacheEntry.ns, cacheEntry.authoritative, nil
 	} else {
 		log(dnsServer+"["+mode+"]>", host)
 	}
@@ -86,7 +98,7 @@ func lookupNS(
 
 	resp, _, err := client.ExchangeContext(ctx, query, dnsServer+":53")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// if response was truncated, retry over TCP
@@ -95,7 +107,7 @@ func lookupNS(
 	}
 
 	if resp.Rcode != dns.RcodeSuccess {
-		return nil, fmt.Errorf("unexpected rcode: %v", resp.Rcode)
+		return nil, false, fmt.Errorf("unexpected rcode: %v", resp.Rcode)
 	}
 
 	// prefer NS section, fall back to Answer, fall back to Extra
@@ -103,7 +115,12 @@ func lookupNS(
 	for _, section := range [][]dns.RR{resp.Ns, resp.Answer, resp.Extra} {
 		for _, record := range section {
 			if nsRecord, isNS := record.(*dns.NS); isNS {
-				log(fmt.Sprintf("NS: %s TTL=%d", nsRecord.Ns, nsRecord.Hdr.Ttl))
+				log(fmt.Sprintf(
+					"NS: %s TTL=%d Authoritative=%t",
+					nsRecord.Ns,
+					nsRecord.Hdr.Ttl,
+					resp.Authoritative,
+				))
 				nameServers = append(nameServers, nsRecord.Ns)
 				if nsRecord.Hdr.Ttl < ttl {
 					ttl = nsRecord.Hdr.Ttl
@@ -120,9 +137,10 @@ func lookupNS(
 	if ttl < RecurseMinTTL {
 		ttl = RecurseMinTTL
 	}
-	nsCache.Set(cacheKey, nameServers, time.Second*time.Duration(ttl))
+	cacheEntry = nsResp{nameServers, resp.Authoritative}
+	nsCache.Set(cacheKey, cacheEntry, time.Second*time.Duration(ttl))
 
-	return nameServers, nil
+	return nameServers, resp.Authoritative, nil
 }
 
 // return the hostname of the authoritative name servers for a domain
@@ -154,22 +172,36 @@ func authority(
 	}
 	defer semaphore.(*nsync.Semaphore).Release()
 
-	var responsibleNameServer string
-	parts := strings.Split(strings.Trim(host, "."), ".")
+	// bootstrap things by querying a recursive server for the eTLD server
+	suffix, _ := publicsuffix.PublicSuffix(strings.Trim(host, "."))
+	tldNS, _, err := lookupNS(
+		ctx,
+		suffix+".",
+		RecurseServer,
+		"udp",
+		log,
+	)
+	if err != nil {
+		return "", err
+	}
+	if len(tldNS) == 0 {
+		return "", ErrNoETLDNS
+	}
+	// BUG(jon): we don't try multiple nameservers
+	responsibleNameServer := tldNS[0]
 
-domainLevels:
-	for i := len(parts) - 1; i >= 0; i-- {
-		currentHost := strings.Join(parts[i:], ".")
-		suffix, _ := publicsuffix.PublicSuffix(currentHost)
-		if currentHost == suffix {
-			responsibleNameServer = RecurseServer
+	i := 0
+nextNameServer:
+	for {
+		i++
+		if i > RecurseMaxDepth {
+			return "", ErrMaxDepthExceeded
 		}
-		currentHost += "."
 
 		// do DNS lookup
-		nameServers, err := lookupNS(
+		nameServers, authoritative, err := lookupNS(
 			ctx,
-			currentHost,
+			host,
 			responsibleNameServer,
 			"udp",
 			log,
@@ -186,7 +218,7 @@ domainLevels:
 				log("switching to nameserver", nameServer)
 				responsibleNameServer = nameServer
 				// BUG(jon): we don't try multiple nameservers
-				continue domainLevels
+				continue nextNameServer
 			}
 		}
 		// if we got here, we didn't find a *.withfallback.com nameserver
@@ -197,7 +229,11 @@ domainLevels:
 			log("switching to nameserver", nameServer)
 			responsibleNameServer = nameServer
 			// BUG(jon): we don't try multiple nameservers
-			continue domainLevels
+			continue nextNameServer
+		}
+
+		if authoritative {
+			break
 		}
 	}
 
