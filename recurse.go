@@ -18,6 +18,7 @@ import (
 var ErrETLD1ConcurencyLimit = errors.New("eTLD+1 is already at its query concurency limit")
 var ErrNoETLDNS = errors.New("could not find eTLD nameserver")
 var ErrMaxDepthExceeded = errors.New("exceeded maximum recursion depth")
+var ErrNoNS = errors.New("no name servers found")
 var nsCache = expiremap.New() // used by lookupNS()
 var recursionLimiter sync.Map // used by authority()
 
@@ -73,12 +74,10 @@ func lookupNS(
 		// so I don't care
 		ttl := nsCache.GetTTL(cacheKey) / int64(time.Second)
 		for _, nameServer := range cacheEntry.ns {
-			log(fmt.Sprintf(
-				"NS: %s TTL=%d Authoritative=%t",
-				nameServer,
-				ttl,
-				cacheEntry.authoritative,
-			))
+			log(fmt.Sprintf("NS: %s TTL=%d", nameServer, ttl))
+		}
+		if cacheEntry.authoritative {
+			log("authoritative")
 		}
 
 		return cacheEntry.ns, cacheEntry.authoritative, nil
@@ -115,12 +114,7 @@ func lookupNS(
 	for _, section := range [][]dns.RR{resp.Ns, resp.Answer, resp.Extra} {
 		for _, record := range section {
 			if nsRecord, isNS := record.(*dns.NS); isNS {
-				log(fmt.Sprintf(
-					"NS: %s TTL=%d Authoritative=%t",
-					nsRecord.Ns,
-					nsRecord.Hdr.Ttl,
-					resp.Authoritative,
-				))
+				log(fmt.Sprintf("NS: %s TTL=%d", nsRecord.Ns, nsRecord.Hdr.Ttl))
 				nameServers = append(nameServers, nsRecord.Ns)
 				if nsRecord.Hdr.Ttl < ttl {
 					ttl = nsRecord.Hdr.Ttl
@@ -131,6 +125,9 @@ func lookupNS(
 			// if we got some servers in this section, don't fallback
 			break
 		}
+	}
+	if resp.Authoritative {
+		log("authoritative")
 	}
 
 	// save to cache
@@ -189,9 +186,10 @@ func authority(
 	}
 	// BUG(jon): we don't try multiple nameservers
 	responsibleNameServer := tldNS[0]
+	eTLD1, _ := publicsuffix.EffectiveTLDPlusOne(strings.Trim(host, "."))
+	eTLD1 += "."
 
 	i := 0
-nextNameServer:
 	for {
 		i++
 		if i > RecurseMaxDepth {
@@ -199,38 +197,44 @@ nextNameServer:
 		}
 
 		// do DNS lookup
-		nameServers, authoritative, err := lookupNS(
-			ctx,
-			host,
-			responsibleNameServer,
-			"udp",
-			log,
-		)
+		var nameServers []string
+		var authoritative bool
+		if i == 1 && host != eTLD1 {
+			// trigger special cache-friendly behavior at the eTLD+1 level
+			// so as not to hammer the TLD servers.
+			nameServers, _, err = lookupNS(
+				ctx,
+				eTLD1,
+				responsibleNameServer,
+				"udp",
+				log,
+			)
+		} else {
+			nameServers, authoritative, err = lookupNS(
+				ctx,
+				host,
+				responsibleNameServer,
+				"udp",
+				log,
+			)
+		}
 		if err != nil {
 			return "", err
 		}
 
-		// look for "*.withfallback.com" name servers
-		for _, nameServer := range nameServers {
-			ip := IPv6Extract(nameServer)
-			// if we found one, do all future queries using it
-			if ip != nil {
-				log("switching to nameserver", nameServer)
-				responsibleNameServer = nameServer
-				// BUG(jon): we don't try multiple nameservers
-				continue nextNameServer
+		next := nextNameServer(nameServers)
+		if next == "" {
+			if authoritative {
+				// if this server has the authority to tell us there are no
+				// name servers at this leve, then it is the name server
+				// for this level
+				break
+			} else {
+				return "", ErrNoNS
 			}
 		}
-		// if we got here, we didn't find a *.withfallback.com nameserver
-		// at this level. That might be because this is not the start of a
-		// new zone, or because it was deligated to a non-withfallback
-		// server
-		for _, nameServer := range nameServers {
-			log("switching to nameserver", nameServer)
-			responsibleNameServer = nameServer
-			// BUG(jon): we don't try multiple nameservers
-			continue nextNameServer
-		}
+		responsibleNameServer = next
+		log("switching to nameserver", responsibleNameServer)
 
 		if authoritative {
 			break
@@ -241,6 +245,27 @@ nextNameServer:
 	// domain is deligated to a "normal" nameserver) or the authoritative
 	// name server in charge of the specified domain.
 	return responsibleNameServer, nil
+}
+
+// BUG(jon): we don't try multiple nameservers
+func nextNameServer(nameServers []string) string {
+	// look for "*.withfallback.com" name servers
+	for _, nameServer := range nameServers {
+		ip := IPv6Extract(nameServer)
+		// if we found one, do all future queries using it
+		if ip != nil {
+			return nameServer
+		}
+	}
+	// if we got here, we didn't find a *.withfallback.com nameserver
+	// at this level. That might be because this is not the start of a
+	// new zone, or because it was deligated to a non-withfallback
+	// server
+	if len(nameServers) > 0 {
+		return nameServers[0]
+	}
+
+	return ""
 }
 
 type recurseMode string // "tcp" or "udp"
