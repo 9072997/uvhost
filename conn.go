@@ -37,13 +37,14 @@ func NewConn(tcpConn *net.TCPConn) Conn {
 	return c
 }
 
-func (c *Conn) Close(i ...interface{}) {
+func (c *Conn) Close() error {
 	c.Log("closing client side connection")
 
 	c.printLog()
 
-	c.TCPConn.Close()
+	err := c.TCPConn.Close()
 	c.TCPConn = nil
+	return err
 }
 
 func (c *Conn) DialBackend() (*net.TCPConn, error) {
