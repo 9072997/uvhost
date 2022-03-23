@@ -6,6 +6,13 @@ An IPv4 to IPv6 reverse proxy service similar to http://v4-frontend.netiter.com/
 ### **How do I report abuse?**
 Email Jon@9072997.com
 
+The IP addresses of clients are checked against AbuseIPDB
+
+<a href="https://www.abuseipdb.com/user/74550"
+   title="AbuseIPDB is an IP address blacklist for webmasters and sysadmins to report IP addresses engaging in abusive behavior on their networks">
+<img src="https://www.abuseipdb.com/contributor/74550.svg" alt="AbuseIPDB Contributor Badge" style="width: 400px;">
+</a>
+
 ### **Why would I want this?**
 The world is running out of IPv4 addresses, so NAT is commonly used to share a single public IPv4 address between multiple users. NAT has the side effect of blocking incoming connections. The best solution to this would be for everyone to get connected to the IPv6 internet, where NAT is not necessary. Unfortunately, [many users are not connected to the IPv6 internet](https://www.google.com/intl/en/ipv6/statistics.html). If you have a connection to the IPv6 internet, this service allows you to run many types of servers in a way that will allow IPv6 users to connect directly to you, while allowing IPv4 users to *fall back* to connecting through my IPv4-to-IPv6 reverse proxy.
 

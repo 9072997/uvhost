@@ -23,6 +23,8 @@ const ProxyListenAddr = "127.127.127.127:127"
 const PublicIPv4Addr = "45.33.22.33"
 const PublicIPv6Addr = "2600:3c00::f03c:92ff:fe4c:684a"
 const LogAsStringCutoff = 0.80
+const AbuseIPDBKey = "REDACTED"
+const AbuseConfidenceThreshold = 10
 
 func main() {
 	StartDNS()
