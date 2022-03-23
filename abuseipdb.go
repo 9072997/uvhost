@@ -1,18 +1,23 @@
 package main
 
 import (
-	"crypto/rand"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
 var abuseIPDBCache sync.Map
+var abusePatterns sync.Map
 
 type abuseIPDBResp struct {
 	Data struct {
@@ -73,36 +78,40 @@ func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
 	return confidence.(int)
 }
 
-// abusive people annoy me, so let's annoy them back
-func Annoy(c Conn) {
-	// maximum protocol overhead
-	c.SetWriteBuffer(0)
+// record the opening bytes from abusive connections.
+// BUG(jon): match against these
+func RecordAbusiveOpen(c Conn) {
+	// only read for 1 second
+	c.SetReadDeadline(time.Now().Add(AbuseRecordTime))
+	defer c.SetReadDeadline(time.Time{})
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		numBytes, _ := io.Copy(io.Discard, c)
-		c.Log("bogo read", numBytes, "bytes")
-		wg.Done()
-	}()
-	go func() {
-		numBytes, _ := c.Write([]byte("This IP has been flagged by AbuseIPDB. The connection will be dropped. Reputation is updated every 6 hours."))
-		// use a tiny buffer to force many SYN packets
-		randBuff := make([]byte, 1000)
-	randLoop:
-		for {
-			rand.Reader.Read(randBuff)
-			for _, b := range randBuff {
-				i, err := c.Write([]byte{b})
-				if err != nil {
-					break randLoop
-				}
-				numBytes += i
-				time.Sleep(time.Millisecond)
-			}
-		}
-		c.Log("bogo write", numBytes, "bytes")
-		wg.Done()
-	}()
-	wg.Wait()
+	buff := make([]byte, AbuseRecordLength)
+	n, err := io.ReadFull(c, buff)
+	buff = buff[:n]
+
+	if !errors.Is(err, os.ErrDeadlineExceeded) {
+		c.Log(err)
+		return
+	}
+	if len(buff) == 0 {
+		c.Log("client did not send data within AbuseRecordTime")
+		return
+	}
+
+	hash := md5.Sum(buff)
+	hexHash := hex.EncodeToString(hash[:])
+
+	_, alreadyDiscovered := abusePatterns.LoadOrStore(hash, struct{}{})
+	if alreadyDiscovered {
+		c.Log("client sent old pattern:", hexHash)
+		return
+	}
+	c.Log("client sent new pattern:", hexHash)
+
+	filename := filepath.Join(AbuseRecordPath, hexHash)
+	err = os.WriteFile(filename, buff, 0644)
+	if err != nil {
+		c.Log(err)
+		return
+	}
 }

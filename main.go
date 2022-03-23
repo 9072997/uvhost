@@ -25,6 +25,9 @@ const PublicIPv6Addr = "2600:3c00::f03c:92ff:fe4c:684a"
 const LogAsStringCutoff = 0.80
 const AbuseIPDBKey = "REDACTED"
 const AbuseConfidenceThreshold = 10
+const AbuseRecordTime = time.Second
+const AbuseRecordLength = 4096
+const AbuseRecordPath = "/var/abuse"
 
 func main() {
 	StartDNS()

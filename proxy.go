@@ -40,7 +40,7 @@ func handle(c Conn) {
 	c.Log("AbuseIPDB abuse confidence:", abuseConfidence)
 	if abuseConfidence >= AbuseConfidenceThreshold {
 		c.Log("blocking connection because of abuse score")
-		Annoy(c)
+		RecordAbusiveOpen(c)
 		c.Close()
 		return
 	}
