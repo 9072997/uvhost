@@ -11,7 +11,7 @@ var rTLSIdentifier = regexp.MustCompile(`^\x16\x03[\x00-\x06]`)
 var rSMTPIdentifier = regexp.MustCompile(`(?i)^(?:HELO|EHLO) `)
 var rSMTPRCPTCommand = regexp.MustCompile(`(?i)\nRCPT TO: *(?:<[!-~]+@([!-~]+)>|[!-~]+@([!-~]+)) *\r?\n`)
 var rGenericIdentifier = regexp.MustCompile(`(?i)(?:[0-9a-f]{4}-){7}[0-9a-f]{4}\.` +
-	regexp.QuoteMeta(strings.TrimSuffix(DNSZone, ".")))
+	regexp.QuoteMeta(strings.TrimSuffix(Conf.DNSZone, ".")))
 
 // attempt to identify the host based on what we have so far. Ex:
 //     HOST        FINISHED

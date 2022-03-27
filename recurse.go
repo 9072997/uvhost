@@ -39,11 +39,11 @@ func serveRecurseMode(mode string) {
 	mux.HandleFunc(".", recurseMode(mode).handle)
 
 	// also answer requests for the main zone
-	mux.HandleFunc(DNSZone, HandleMainZone)
+	mux.HandleFunc(Conf.DNSZone, HandleMainZone)
 
 	func() {
 		err := (&dns.Server{
-			Addr:    net.JoinHostPort(PublicIPv4Addr, "53"),
+			Addr:    net.JoinHostPort(Conf.PublicIPv4Addr, "53"),
 			Net:     mode,
 			Handler: mux,
 		}).ListenAndServe()
@@ -91,7 +91,7 @@ func lookupNS(
 	query := new(dns.Msg)
 	query.SetQuestion(host, dns.TypeNS)
 
-	if dnsServer == RecurseServer {
+	if dnsServer == Conf.RecurseServer {
 		query.RecursionDesired = true
 	}
 
@@ -110,7 +110,7 @@ func lookupNS(
 	}
 
 	// prefer NS section, fall back to Answer, fall back to Extra
-	ttl := uint32(RecurseMaxTTL)
+	ttl := uint32(Conf.RecurseMaxTTL)
 	for _, section := range [][]dns.RR{resp.Ns, resp.Answer, resp.Extra} {
 		for _, record := range section {
 			if nsRecord, isNS := record.(*dns.NS); isNS {
@@ -131,8 +131,8 @@ func lookupNS(
 	}
 
 	// save to cache
-	if ttl < RecurseMinTTL {
-		ttl = RecurseMinTTL
+	if ttl < Conf.RecurseMinTTL {
+		ttl = Conf.RecurseMinTTL
 	}
 	cacheEntry = nsResp{nameServers, resp.Authoritative}
 	nsCache.Set(cacheKey, cacheEntry, time.Second*time.Duration(ttl))
@@ -153,7 +153,7 @@ func authority(
 	)
 	semaphore, _ := recursionLimiter.LoadOrStore(
 		etld1,
-		nsync.NewSemaphore(RecurseConcurencyLimit),
+		nsync.NewSemaphore(Conf.RecurseConcurencyLimit),
 	)
 	// if we spend too much time waiting on the lock, timeout
 	ctxDeadline, ctxHasDeadline := ctx.Deadline()
@@ -161,7 +161,7 @@ func authority(
 	if ctxHasDeadline {
 		maxWaitTime = time.Until(ctxDeadline)
 	} else {
-		maxWaitTime = MaxLookupTime
+		maxWaitTime = Conf.MaxLookupTime.Duration
 	}
 	gotLock := semaphore.(*nsync.Semaphore).TryAcquireTimeout(maxWaitTime)
 	if !gotLock {
@@ -174,7 +174,7 @@ func authority(
 	tldNS, _, err := lookupNS(
 		ctx,
 		suffix+".",
-		RecurseServer,
+		Conf.RecurseServer,
 		"udp",
 		log,
 	)
@@ -192,7 +192,7 @@ func authority(
 	i := 0
 	for {
 		i++
-		if i > RecurseMaxDepth {
+		if i > Conf.RecurseMaxDepth {
 			return "", ErrMaxDepthExceeded
 		}
 
@@ -275,7 +275,7 @@ func (mode recurseMode) handle(resp dns.ResponseWriter, req *dns.Msg) {
 	defer printLog()
 	log(FormatDNS(*req))
 
-	ctx, cancel := context.WithTimeout(context.Background(), MaxLookupTime)
+	ctx, cancel := context.WithTimeout(context.Background(), Conf.MaxLookupTime.Duration)
 	defer cancel()
 
 	// this is overwritten for successfully proxied requests
@@ -300,7 +300,7 @@ func (mode recurseMode) handle(resp dns.ResponseWriter, req *dns.Msg) {
 				dialAddr := fmt.Sprintf("[%s]:53", ip)
 				mFromBackend, _, err := (&dns.Client{
 					Net:     string(mode),
-					UDPSize: RecurseBufferSize,
+					UDPSize: Conf.RecurseBufferSize,
 				}).ExchangeContext(ctx, req, dialAddr)
 				if err == nil {
 					m = mFromBackend

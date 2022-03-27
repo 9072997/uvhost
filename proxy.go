@@ -8,7 +8,7 @@ import (
 )
 
 func Proxy() {
-	listenAddr := parseAddr(ProxyListenAddr)
+	listenAddr := parseAddr(Conf.ProxyListenAddr)
 	if listenAddr == nil {
 		panic("failed to parse listen address")
 	}
@@ -38,7 +38,7 @@ func handle(c Conn) {
 	ip := c.RemoteAddr().(*net.TCPAddr).IP
 	abuseConfidence := AbuseIPDBCheck(ip, c.Log)
 	c.Log("AbuseIPDB abuse confidence:", abuseConfidence)
-	if abuseConfidence >= AbuseConfidenceThreshold {
+	if abuseConfidence >= Conf.AbuseConfidenceThreshold {
 		c.Log("blocking connection because of abuse score")
 		RecordAbusiveOpen(c)
 		c.Close()

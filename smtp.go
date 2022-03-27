@@ -93,7 +93,7 @@ func EatSMTP(upstream io.Reader) (n int, err error) {
 // for simplicity we are just going to send all the replies the client
 // expects from us all at once.
 func StuffSMTP(client io.Writer) (n int, err error) {
-	n, err = client.Write([]byte("220 " + strings.TrimSuffix(DNSZone, ".") + " this is an IPv4 to IPv6 reverse proxy\r\n" +
+	n, err = client.Write([]byte("220 " + strings.TrimSuffix(Conf.DNSZone, ".") + " this is an IPv4 to IPv6 reverse proxy\r\n" +
 		"250 I'm blindly accepting that command so we can get to the part where you tell me who you want to talk to\r\n" +
 		"250 Once you send me a TO address I will connect you to the real mail server\r\n",
 	))

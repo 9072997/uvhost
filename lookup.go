@@ -6,7 +6,7 @@ import (
 )
 
 func IPv6Lookup(host string) ([]net.IP, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), MaxLookupTime)
+	ctx, cancel := context.WithTimeout(context.Background(), Conf.MaxLookupTime.Duration)
 	defer cancel()
 
 	// do DNS lookup
@@ -29,7 +29,7 @@ func IPv6Lookup(host string) ([]net.IP, error) {
 
 // return the hostname of the mail servers for a domain
 func IPv6LookupMX(host string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), MaxLookupTime)
+	ctx, cancel := context.WithTimeout(context.Background(), Conf.MaxLookupTime.Duration)
 	defer cancel()
 
 	// do DNS lookup

@@ -78,7 +78,7 @@ func (c *Conn) DialBackend() (*net.TCPConn, error) {
 			}
 			c.Log("dialing backend:", c.mappedAddr(), "->", backendAddr)
 			backendConn, err := (&net.Dialer{
-				Timeout:   MaxConnectTime,
+				Timeout:   Conf.MaxConnectTime.Duration,
 				LocalAddr: c.mappedAddr(),
 			}).Dial(
 				"tcp6",
@@ -164,7 +164,7 @@ func (c Conn) ClientIsIPv6() bool {
 }
 
 func (c *Conn) identifyHosts() (hosts []string, err error) {
-	c.SetReadDeadline(time.Now().Add(MaxIdentifyTime))
+	c.SetReadDeadline(time.Now().Add(Conf.MaxIdentifyTime.Duration))
 	defer c.SetReadDeadline(time.Time{})
 
 	// if there is an error, you just don't get a port hint
@@ -209,7 +209,7 @@ func (c Conn) mappedAddr() *net.TCPAddr {
 	srcIP := c.RemoteAddr().(*net.TCPAddr).IP
 	srcPort := c.RemoteAddr().(*net.TCPAddr).Port
 	return &net.TCPAddr{
-		IP:   net.ParseIP(MappedPrefix + srcIP.String()),
+		IP:   net.ParseIP(Conf.MappedPrefix + srcIP.String()),
 		Port: srcPort,
 	}
 }

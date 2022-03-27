@@ -25,6 +25,6 @@ func ServeInfo() {
 	mux := http.NewServeMux()
 	mux.Handle("/", staticHTML(readmeHTML))
 	mux.Handle("/abuseipdb-verification.html", staticHTML(abuseIPDB))
-	listenAddr := fmt.Sprintf("[%s]:http", PublicIPv6Addr)
+	listenAddr := fmt.Sprintf("[%s]:http", Conf.PublicIPv6Addr)
 	http.ListenAndServe(listenAddr, mux)
 }

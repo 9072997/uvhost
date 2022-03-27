@@ -52,7 +52,7 @@ func Stringify(ii interface{}) string {
 		}
 		if nonprintableChars == 0 {
 			return "STRING:" + string(i)
-		} else if float32(printableChars)/float32(len(i)) > LogAsStringCutoff {
+		} else if float32(printableChars)/float32(len(i)) > Conf.LogAsStringCutoff {
 			j, _ := json.Marshal(string(i))
 			return "JSON:" + string(j)
 		} else {

@@ -17,11 +17,11 @@ func StartDNS() {
 	mux := dns.NewServeMux()
 
 	// attach request handler func
-	mux.HandleFunc(DNSZone, HandleMainZone)
+	mux.HandleFunc(Conf.DNSZone, HandleMainZone)
 
 	go func() {
 		err := (&dns.Server{
-			Addr:    net.JoinHostPort(PublicIPv6Addr, "53"),
+			Addr:    net.JoinHostPort(Conf.PublicIPv6Addr, "53"),
 			Net:     "udp",
 			Handler: mux,
 		}).ListenAndServe()
@@ -29,7 +29,7 @@ func StartDNS() {
 	}()
 	go func() {
 		err := (&dns.Server{
-			Addr:    net.JoinHostPort(PublicIPv6Addr, "53"),
+			Addr:    net.JoinHostPort(Conf.PublicIPv6Addr, "53"),
 			Net:     "tcp",
 			Handler: mux,
 		}).ListenAndServe()
@@ -45,18 +45,18 @@ func HandleMainZone(resp dns.ResponseWriter, req *dns.Msg) {
 		for _, q := range m.Question {
 			ip := IPv6Extract(q.Name)
 			if ip == nil {
-				if eq(q.Name, "ns1."+DNSZone) || eq(q.Name, "ns2."+DNSZone) {
+				if eq(q.Name, "ns1."+Conf.DNSZone) || eq(q.Name, "ns2."+Conf.DNSZone) {
 					// respond with our addresses
 					answer(m, q,
-						parseIPv4OrPanic(PublicIPv4Addr),
-						parseIPv6OrPanic(PublicIPv6Addr),
+						parseIPv4OrPanic(Conf.PublicIPv4Addr),
+						parseIPv6OrPanic(Conf.PublicIPv6Addr),
 						false,
 					)
-				} else if eq(q.Name, DNSZone) {
+				} else if eq(q.Name, Conf.DNSZone) {
 					// answer as ourselves and include SOA and NS records
 					answer(m, q,
-						parseIPv4OrPanic(PublicIPv4Addr),
-						parseIPv6OrPanic(PublicIPv6Addr),
+						parseIPv4OrPanic(Conf.PublicIPv4Addr),
+						parseIPv6OrPanic(Conf.PublicIPv6Addr),
 						true,
 					)
 				} else {
@@ -64,7 +64,7 @@ func HandleMainZone(resp dns.ResponseWriter, req *dns.Msg) {
 				}
 			} else {
 				// we got a valid IPv6 address as the hostname
-				answer(m, q, parseIPv4OrPanic(PublicIPv4Addr), ip, false)
+				answer(m, q, parseIPv4OrPanic(Conf.PublicIPv4Addr), ip, false)
 			}
 		}
 	} else {
@@ -82,7 +82,7 @@ func answer(
 	isRoot bool,
 ) {
 	// for servers other than ourselves
-	if !parseIPv6OrPanic(PublicIPv6Addr).Equal(ipv6) {
+	if !parseIPv6OrPanic(Conf.PublicIPv6Addr).Equal(ipv6) {
 		// MX, A, AAAA, and TXT records may be overridden by the backend
 		pr := proxyRecords(ipv6, question)
 		if pr != nil {
@@ -99,7 +99,7 @@ func answer(
 				Name:   question.Name,
 				Rrtype: dns.TypeMX,
 				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
+				Ttl:    Conf.DNSTTL,
 			},
 			Mx:         question.Name,
 			Preference: 10,
@@ -113,7 +113,7 @@ func answer(
 				Name:   question.Name,
 				Rrtype: dns.TypeA,
 				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
+				Ttl:    Conf.DNSTTL,
 			},
 			A: ipv4,
 		})
@@ -126,7 +126,7 @@ func answer(
 				Name:   question.Name,
 				Rrtype: dns.TypeAAAA,
 				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
+				Ttl:    Conf.DNSTTL,
 			},
 			AAAA: ipv6,
 		})
@@ -139,7 +139,7 @@ func answer(
 				Name:   question.Name,
 				Rrtype: dns.TypeNS,
 				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
+				Ttl:    Conf.DNSTTL,
 			},
 			Ns: "ns1." + question.Name,
 		})
@@ -148,7 +148,7 @@ func answer(
 				Name:   question.Name,
 				Rrtype: dns.TypeNS,
 				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
+				Ttl:    Conf.DNSTTL,
 			},
 			Ns: "ns2." + question.Name,
 		})
@@ -159,7 +159,7 @@ func answer(
 					Name:   "ns1." + question.Name,
 					Rrtype: dns.TypeA,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				A: ipv4,
 			})
@@ -168,7 +168,7 @@ func answer(
 					Name:   "ns2." + question.Name,
 					Rrtype: dns.TypeA,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				A: ipv4,
 			})
@@ -179,7 +179,7 @@ func answer(
 					Name:   "ns1." + question.Name,
 					Rrtype: dns.TypeAAAA,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				AAAA: ipv6,
 			})
@@ -188,7 +188,7 @@ func answer(
 					Name:   "ns2." + question.Name,
 					Rrtype: dns.TypeAAAA,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				AAAA: ipv6,
 			})
@@ -202,15 +202,15 @@ func answer(
 				Name:   question.Name,
 				Rrtype: dns.TypeSOA,
 				Class:  dns.ClassINET,
-				Ttl:    DNSTTL,
+				Ttl:    Conf.DNSTTL,
 			},
 			Ns:      "ns1." + question.Name,
-			Mbox:    strings.ReplaceAll(DNSAdminEmail, "@", ".") + ".",
-			Serial:  2000010101, // bogus, but format confrming serial
-			Refresh: 1200,       // min recomended value (not used)
-			Retry:   DNSTTL,     // (not used)
-			Expire:  1209600,    // min recomended value (not used)
-			Minttl:  DNSTTL,
+			Mbox:    strings.ReplaceAll(Conf.DNSAdminEmail, "@", ".") + ".",
+			Serial:  2000010101,  // bogus, but format confrming serial
+			Refresh: 1200,        // min recomended value (not used)
+			Retry:   Conf.DNSTTL, // (not used)
+			Expire:  1209600,     // min recomended value (not used)
+			Minttl:  Conf.DNSTTL,
 		})
 	}
 }
@@ -220,7 +220,7 @@ var rIPv6Subdomain = regexp.MustCompile(`(?i)^(?:[0-9a-f]{4}-){7}[0-9a-f]{4}$`)
 // extract an ipv6 address from a DNS query name
 func IPv6Extract(q string) net.IP {
 	q = strings.ToLower(q)
-	suffix := "." + strings.ToLower(DNSZone)
+	suffix := "." + strings.ToLower(Conf.DNSZone)
 
 	if !strings.HasSuffix(q, suffix) {
 		return nil
@@ -267,7 +267,7 @@ func parseIPv4OrPanic(s string) net.IP {
 func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
-		DNSPassthroughTimeout,
+		Conf.DNSPassthroughTimeout.Duration,
 	)
 	defer cancel()
 
@@ -275,7 +275,7 @@ func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			d := net.Dialer{
-				Timeout: DNSPassthroughTimeout,
+				Timeout: Conf.DNSPassthroughTimeout.Duration,
 			}
 			return d.DialContext(
 				ctx,
@@ -294,7 +294,7 @@ func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 					Name:   question.Name,
 					Rrtype: dns.TypeMX,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				Mx:         backendRecord.Host,
 				Preference: backendRecord.Pref,
@@ -308,7 +308,7 @@ func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 					Name:   question.Name,
 					Rrtype: dns.TypeA,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				A: backendRecord,
 			})
@@ -321,7 +321,7 @@ func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 					Name:   question.Name,
 					Rrtype: dns.TypeAAAA,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				AAAA: backendRecord,
 			})
@@ -337,7 +337,7 @@ func proxyRecords(dnsServer net.IP, question dns.Question) (r []dns.RR) {
 					Name:   question.Name,
 					Rrtype: dns.TypeTXT,
 					Class:  dns.ClassINET,
-					Ttl:    DNSTTL,
+					Ttl:    Conf.DNSTTL,
 				},
 				Txt: backendRecords,
 			},
