@@ -13,6 +13,7 @@ import (
 
 // ErrNoHost indicates that a host could not be identified
 var ErrNoHost = errors.New("a hostname could not be identified")
+var ErrAbusePattern = errors.New("hostname identification was aborted because the client sent an abusive open")
 var ErrNoV6Addr = errors.New("an IPv6 address could not be found for the given hostname")
 
 type Conn struct {
@@ -188,6 +189,19 @@ func (c *Conn) identifyHosts() (hosts []string, err error) {
 			return nil, err
 		}
 		c.previewPointer += readBytes
+
+		// check if the connection matches a known abuse pattern
+		pattern, err := CheckAbusiveOpen(c.preview[:c.previewPointer])
+		if err != nil {
+			c.Log("error checking for abuse pattern matches:", err)
+			// we will assume the connection is fine and keep going
+		}
+		if pattern != nil {
+			c.Log("client sent known abuse pattern", pattern.Hash, pattern.Comment)
+			ip := c.RemoteAddr().(*net.TCPAddr).IP
+			AbuseIPDBReport(ip, *pattern, c.Log)
+			return nil, ErrAbusePattern
+		}
 
 		hosts, finished := Parse(
 			c.preview[:c.previewPointer],

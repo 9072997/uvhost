@@ -37,7 +37,13 @@ func handle(c Conn) {
 
 	ip := c.RemoteAddr().(*net.TCPAddr).IP
 	abuseConfidence := AbuseIPDBCheck(ip, c.Log)
-	c.Log("AbuseIPDB abuse confidence:", abuseConfidence)
+
+	if abuseConfidence == ReportedByUs {
+		c.Log("AbuseIPDB abuse confidence: ReportedByUs")
+	} else {
+		c.Log("AbuseIPDB abuse confidence:", abuseConfidence)
+	}
+
 	if abuseConfidence >= Conf.AbuseConfidenceThreshold {
 		c.Log("blocking connection because of abuse score")
 		RecordAbusiveOpen(c)

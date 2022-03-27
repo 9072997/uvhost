@@ -21,4 +21,5 @@ AbuseIPDBKey = "REDACTED"
 AbuseConfidenceThreshold = 10
 AbuseRecordTime = "1s"
 AbuseRecordLength = 4096
-AbuseRecordPath = "/var/abuse"
+AbuseRecordPath = "/var/abuse/learned"
+AbusePatternsFile = "/var/abuse/known"

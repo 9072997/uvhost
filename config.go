@@ -44,6 +44,7 @@ var Conf struct {
 	AbuseRecordTime          Duration
 	AbuseRecordLength        uint
 	AbuseRecordPath          string
+	AbusePatternsFile        string
 }
 
 func LoadConfig(filename string) error {
