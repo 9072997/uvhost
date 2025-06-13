@@ -41,9 +41,3 @@ Connections from the reverse proxy always come from `2600:3c00:e000:03f5::/96` w
 It supports DNS, as long as you don't use vanity nameservers. Set your nameservers to something like `2001-0db8-0000-0000-0001-0000-0000-0001.withfallback.com` (substitute your DNS server's IPv6 address).
 
 It also has very limited support for running your own DNS server for the `withfallback.com` domain itself. For now you can only set `A`, `AAAA`, `MX`, and `TXT` records, and everything is limited to a TTL of 5 minutes.
-
-### **I don't have a public IPv6 address**
-[Do you want one](http://wireguard.9072997.net/)? You will need to [install WireGuard](https://www.wireguard.com/install/).
-
-### **I have a public IPv6 address, but I can't accept incoming connections**
-If you control the firewall, change your firewall rules to allow incoming connections on the appropriate port. If not, see the above question.
