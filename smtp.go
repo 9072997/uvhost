@@ -8,7 +8,7 @@ import (
 
 const SMTPPort = 25
 
-// read from an io.Reader up to and incluing the next occourence of the
+// read from an io.Reader up to and including the next occurrence of the
 // indicated byte
 func eatUntil(r io.Reader, b byte) (n int, err error) {
 	buff := make([]byte, 1)
@@ -39,13 +39,13 @@ func eatSMTPReply(r io.Reader, code uint) (n int, err error) {
 	}
 
 	// space indicates this is the last line, hyphen indicates more lines
-	codeSeperator := make([]byte, 1)
-	nn, err := io.ReadFull(r, codeSeperator)
+	codeSeparator := make([]byte, 1)
+	nn, err := io.ReadFull(r, codeSeparator)
 	n += nn
 	if err != nil {
 		return n, err
 	}
-	switch codeSeperator[0] {
+	switch codeSeparator[0] {
 	case ' ':
 		nn, err := eatUntil(r, '\n')
 		n += nn
@@ -58,12 +58,12 @@ func eatSMTPReply(r io.Reader, code uint) (n int, err error) {
 		}
 		return eatSMTPReply(r, code)
 	default:
-		return n, fmt.Errorf("unexpected charicter after SMTP code: %s",
-			codeSeperator)
+		return n, fmt.Errorf("unexpected character after SMTP code: %s",
+			codeSeparator)
 	}
 }
 
-// eat 220, 250, 250, which sould get us to the point where we are ready to
+// eat 220, 250, 250, which should get us to the point where we are ready to
 // connect the client to the server.
 func EatSMTP(upstream io.Reader) (n int, err error) {
 	// eat server welcome banner
@@ -89,7 +89,7 @@ func EatSMTP(upstream io.Reader) (n int, err error) {
 	return n, nil
 }
 
-// Ideally we would actuially look at what the client is sending us, but
+// Ideally we would actually look at what the client is sending us, but
 // for simplicity we are just going to send all the replies the client
 // expects from us all at once.
 func StuffSMTP(client io.Writer) (n int, err error) {

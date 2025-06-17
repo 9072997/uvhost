@@ -27,7 +27,7 @@ var Conf struct {
 	DNSPassthroughTimeout    Duration
 	RecurseMaxTTL            uint32
 	RecurseMinTTL            uint32
-	RecurseConcurencyLimit   int
+	RecurseConcurrencyLimit  int
 	RecurseMaxDepth          int
 	RecurseServer            string
 	RecurseBufferSize        uint16

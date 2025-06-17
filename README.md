@@ -25,7 +25,7 @@ The world is running out of IPv4 addresses, so NAT is commonly used to share a s
 ### **How do I use this?**
 * [Make sure you have IPv6 connectivity](https://ipv6-test.com/)
 * Make sure you don't have a firewall blocking incoming connections to your IPv6 address. Once you have your server running, you can check [here](http://www.ipv6scanner.com/cgi-bin/main.py).
-* Access your service at your-ipv6-address.withfallback.com. You must include all possible zeros in the IPv6 address and use a dash "-" rather than a colon as the seperator. For example, if your IPv6 address was `2001:db8::1:0:0:1` you would use `2001-0db8-0000-0000-0001-0000-0000-0001.withfallback.com`.
+* Access your service at your-ipv6-address.withfallback.com. You must include all possible zeros in the IPv6 address and use a dash "-" rather than a colon as the separator. For example, if your IPv6 address was `2001:db8::1:0:0:1` you would use `2001-0db8-0000-0000-0001-0000-0000-0001.withfallback.com`.
 * NOTE: you can also use subdomains. They will point to the same address. Ex: `foo.2001-0db8-0000-0000-0001-0000-0000-0001.withfallback.com`
 
 ### **Can I use a custom DNS name?**

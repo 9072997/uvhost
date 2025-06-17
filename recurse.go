@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-var ErrETLD1ConcurencyLimit = errors.New("eTLD+1 is already at its query concurency limit")
+var ErrETLD1ConcurrencyLimit = errors.New("eTLD+1 is already at its query concurrency limit")
 var ErrNoETLDNS = errors.New("could not find eTLD nameserver")
 var ErrMaxDepthExceeded = errors.New("exceeded maximum recursion depth")
 var ErrNoNS = errors.New("no name servers found")
@@ -146,14 +146,14 @@ func authority(
 	host string,
 	log func(...interface{}),
 ) (string, error) {
-	// aquire semaphore for eTLD+1. This prevents infinite recursion and
-	// limits DoS oppertunities. errors share the "" semaphore.
+	// acquire semaphore for eTLD+1. This prevents infinite recursion and
+	// limits DoS opportunities. errors share the "" semaphore.
 	etld1, _ := publicsuffix.EffectiveTLDPlusOne(
 		strings.Trim(dns.CanonicalName(host), "."),
 	)
 	semaphore, _ := recursionLimiter.LoadOrStore(
 		etld1,
-		nsync.NewSemaphore(Conf.RecurseConcurencyLimit),
+		nsync.NewSemaphore(Conf.RecurseConcurrencyLimit),
 	)
 	// if we spend too much time waiting on the lock, timeout
 	ctxDeadline, ctxHasDeadline := ctx.Deadline()
@@ -165,7 +165,7 @@ func authority(
 	}
 	gotLock := semaphore.(*nsync.Semaphore).TryAcquireTimeout(maxWaitTime)
 	if !gotLock {
-		return "", ErrETLD1ConcurencyLimit
+		return "", ErrETLD1ConcurrencyLimit
 	}
 	defer semaphore.(*nsync.Semaphore).Release()
 
@@ -226,7 +226,7 @@ func authority(
 		if next == "" {
 			if authoritative {
 				// if this server has the authority to tell us there are no
-				// name servers at this leve, then it is the name server
+				// name servers at this level, then it is the name server
 				// for this level
 				break
 			} else {
@@ -242,7 +242,7 @@ func authority(
 	}
 
 	// at this point responsibleNameServer should either be nil (if the
-	// domain is deligated to a "normal" nameserver) or the authoritative
+	// domain is delegated to a "normal" nameserver) or the authoritative
 	// name server in charge of the specified domain.
 	return responsibleNameServer, nil
 }
@@ -259,7 +259,7 @@ func nextNameServer(nameServers []string) string {
 	}
 	// if we got here, we didn't find a *.withfallback.com nameserver
 	// at this level. That might be because this is not the start of a
-	// new zone, or because it was deligated to a non-withfallback
+	// new zone, or because it was delegated to a non-withfallback
 	// server
 	if len(nameServers) > 0 {
 		return nameServers[0]
@@ -283,7 +283,7 @@ func (mode recurseMode) handle(resp dns.ResponseWriter, req *dns.Msg) {
 
 	// normal DNS query packets only ever contain a single question, and
 	// "who should we forward to" would get complex anr risky if those
-	// questions should go to diffrent servers, so we reject packets with
+	// questions should go to different servers, so we reject packets with
 	// multiple questions.
 	if req.Opcode == dns.OpcodeQuery && len(req.Question) == 1 {
 		q := req.Question[0]

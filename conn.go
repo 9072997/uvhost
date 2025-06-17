@@ -123,7 +123,7 @@ func (c *Conn) Connect(backendConn *net.TCPConn) {
 		wg.Done()
 	}()
 	go func() {
-		// for some protocols (ex: SMTP) we have to start speeking to know
+		// for some protocols (ex: SMTP) we have to start speaking to know
 		// who to dial. If that happened, we need to "eat" the stuff the
 		// server is going to send that we already sent. This serves a
 		// similar function to the preview buffer.

@@ -5,7 +5,7 @@ DNSPassthroughTimeout = "500ms"
 RecurseMaxTTL = 86400
 RecurseMinTTL = 60
 # per eTLD+1
-RecurseConcurencyLimit = 2
+RecurseConcurrencyLimit = 2
 RecurseMaxDepth = 7
 RecurseServer = "[2600:3c00::3]"
 RecurseBufferSize = 1500

@@ -40,7 +40,7 @@ func Stringify(ii interface{}) string {
 		if len(i) == 0 {
 			return "STRING:"
 		}
-		// huristically guess if this is ascii
+		// heuristically guess if this is ascii
 		printableChars := 0
 		nonprintableChars := 0
 		for _, c := range i {

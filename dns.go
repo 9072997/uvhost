@@ -206,10 +206,10 @@ func answer(
 			},
 			Ns:      "ns1." + question.Name,
 			Mbox:    strings.ReplaceAll(Conf.DNSAdminEmail, "@", ".") + ".",
-			Serial:  2000010101,  // bogus, but format confrming serial
-			Refresh: 1200,        // min recomended value (not used)
+			Serial:  2000010101,  // bogus, but format conforming serial
+			Refresh: 1200,        // min recommended value (not used)
 			Retry:   Conf.DNSTTL, // (not used)
-			Expire:  1209600,     // min recomended value (not used)
+			Expire:  1209600,     // min recommended value (not used)
 			Minttl:  Conf.DNSTTL,
 		})
 	}
