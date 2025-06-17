@@ -25,3 +25,4 @@ AbuseDBPath = "/var/abuse/db.sqlite3"
 AbuseIPExpire = "6h"
 AbusePatternExpire = "168h"
 AbusePatternsPerIP = 1000
+AbuseIPDBVerification = "abuseipdb-verification-Y6KrOhDv"
