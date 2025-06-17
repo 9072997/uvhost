@@ -29,8 +29,10 @@ type AbusePatternDB struct {
 	FirstSeen int64
 	LastSeen  int64
 	LastIP    string
+	LastPort  int
 	Count     int
 	ExpiresAt int64
+	Data      []byte
 }
 
 type IPDB struct {
@@ -73,8 +75,10 @@ func StartAbuseDB() error {
 			first_seen INTEGER,
 			last_seen INTEGER,
 			last_ip TEXT,
+			last_port INTEGER,
 			count INTEGER,
-			expires_at INTEGER
+			expires_at INTEGER,
+			data BLOB
 		);
 		CREATE INDEX IF NOT EXISTS idx_patterns_last_ip ON patterns(last_ip);
 	`)
@@ -274,7 +278,11 @@ func RecordAbusiveOpen(c Conn) {
 			return
 		}
 		// Insert or update pattern
-		if err := UpsertUnconfirmedPattern(hexHash, ip.String()); err != nil {
+		port := 0
+		if tcpAddr, ok := c.LocalAddr().(*net.TCPAddr); ok {
+			port = tcpAddr.Port
+		}
+		if err := UpsertUnconfirmedPattern(hexHash, ip.String(), port, buff); err != nil {
 			c.Log("db error:", err)
 		}
 	}
@@ -314,13 +322,16 @@ func GetPatternByHash(hash string) (*AbusePatternDB, error) {
 			first_seen,
 			last_seen,
 			last_ip,
+			last_port,
 			count,
-			expires_at
+			expires_at,
+			data
 		FROM patterns
 		WHERE hash = ?
 	`, hash)
 	var p AbusePatternDB
 	var confirmed int
+	var data []byte
 	err := row.Scan(
 		&p.Hash,
 		&p.Category,
@@ -329,8 +340,10 @@ func GetPatternByHash(hash string) (*AbusePatternDB, error) {
 		&p.FirstSeen,
 		&p.LastSeen,
 		&p.LastIP,
+		&p.LastPort,
 		&p.Count,
 		&p.ExpiresAt,
+		&data,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -339,6 +352,7 @@ func GetPatternByHash(hash string) (*AbusePatternDB, error) {
 		return nil, err
 	}
 	p.Confirmed = confirmed != 0
+	p.Data = data
 	return &p, nil
 }
 
@@ -351,20 +365,41 @@ func CountUnconfirmedPatternsByIP(ip string) (int, error) {
 	return count, nil
 }
 
-func UpsertUnconfirmedPattern(hash, ip string) error {
+func UpsertUnconfirmedPattern(hash string, ip string, port int, data []byte) error {
 	now := time.Now()
 	exp := now.Add(Conf.AbusePatternExpire.Duration)
-	_, err := abuseDB.Exec(`
-		INSERT INTO patterns (
-			hash, category, comment, confirmed, first_seen, last_seen, last_ip, count, expires_at
-		) VALUES (
-			?, '', '', 0, ?, ?, ?, 1, ?
-		)
-		ON CONFLICT(hash) DO UPDATE SET
-			last_seen = excluded.last_seen,
-			last_ip = excluded.last_ip,
-			count = patterns.count + 1,
-			expires_at = excluded.expires_at
-	`, hash, now.Unix(), now.Unix(), ip, exp.Unix())
+	_, err := abuseDB.Exec(
+		`
+			INSERT INTO patterns (
+				hash,
+				category,
+				comment,
+				confirmed,
+				first_seen,
+				last_seen,
+				last_ip,
+				last_port,
+				count,
+				expires_at
+			) VALUES (
+				?, '', '', 0, ?, ?, ?, ?, 1, ?
+			)
+			ON CONFLICT(hash) DO UPDATE SET
+				last_seen = excluded.last_seen,
+				last_ip = excluded.last_ip,
+				last_port = excluded.last_port,
+				count = patterns.count + 1,
+				expires_at = excluded.expires_at,
+				data = CASE
+					WHEN
+						patterns.count + 1 >= ? AND
+						patterns.last_ip <> excluded.last_ip
+						THEN ?
+					ELSE NULL
+				END
+		`,
+		hash, now.Unix(), now.Unix(), ip, port, exp.Unix(),
+		Conf.AbuseSavePatternAfter, data,
+	)
 	return err
 }

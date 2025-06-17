@@ -26,3 +26,4 @@ AbuseIPExpire = "6h"
 AbusePatternExpire = "168h"
 AbusePatternsPerIP = 1000
 AbuseIPDBVerification = "abuseipdb-verification-Y6KrOhDv"
+AbuseSavePatternAfter = 10

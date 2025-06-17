@@ -48,6 +48,7 @@ var Conf struct {
 	AbusePatternExpire       Duration
 	AbusePatternsPerIP       int
 	AbuseIPDBVerification    string
+	AbuseSavePatternAfter    int
 }
 
 func LoadConfig(filename string) error {
