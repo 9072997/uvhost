@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/md5"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,18 +12,34 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 const ReportedByUs = 101 // confidence score
 
-var abuseIPDBCache sync.Map
-var abusePatterns sync.Map
-var knownBadPatterns atomic.Value
+var abuseDB *sql.DB
+
+type AbusePatternDB struct {
+	Hash      string
+	Category  string
+	Comment   string
+	Confirmed bool
+	FirstSeen int64
+	LastSeen  int64
+	LastIP    string
+	Count     int
+	ExpiresAt int64
+}
+
+type IPDB struct {
+	IP              string
+	FirstSeen       int64
+	LastSeen        int64
+	ExpiresAt       int64
+	ReputationScore int
+}
 
 type KnownAbusePattern struct {
 	Hash     string
@@ -36,59 +53,120 @@ type abuseIPDBResp struct {
 	} `json:"data"`
 }
 
-// this is a race condition, but this whole file is a stop-gap
-func init() {
-	go func() {
-		for {
-			// clear cache every 6 hours
-			time.Sleep(6 * time.Hour)
-			abuseIPDBCache = sync.Map{}
-		}
-	}()
-}
-
-// this is sort of a stop-gap until I write a fancier monitoring system
-func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
-	ipStr := ip.String()
-	confidence, inCache := abuseIPDBCache.Load(ipStr)
-
-	if inCache {
-		log("AbuseIPDB cache hit")
-	} else {
-		log("AbuseIPDB cache miss")
-
-		apiURL := fmt.Sprintf(
-			"https://api.abuseipdb.com/api/v2/check?key=%s&ipAddress=%s",
-			Conf.AbuseIPDBKey,
-			url.QueryEscape(ipStr),
-		)
-		resp, err := http.Get(apiURL)
-		if err != nil {
-			// fail open
-			confidence = -1
-			abuseIPDBCache.Store(ipStr, confidence)
-			log("AbuseIPDB request error:", err)
-			return -1
-		}
-
-		defer resp.Body.Close()
-		var respObj abuseIPDBResp
-		err = json.NewDecoder(resp.Body).Decode(&respObj)
-		if err != nil {
-			// fail open
-			confidence = -1
-			abuseIPDBCache.Store(ipStr, confidence)
-			log("AbuseIPDB decode error:", err)
-			return -1
-		}
-
-		confidence = respObj.Data.AbuseConfidenceScore
-		abuseIPDBCache.Store(ipStr, confidence)
+func StartAbuseDB() error {
+	var err error
+	abuseDB, err = sql.Open("sqlite", Conf.AbuseDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to open abuse database: %w", err)
+	}
+	_, err = abuseDB.Exec(`
+		CREATE TABLE IF NOT EXISTS abuseipdb_cache (
+			ip TEXT PRIMARY KEY,
+			confidence INTEGER,
+			updated_at INTEGER
+		);
+		CREATE TABLE IF NOT EXISTS patterns (
+			hash TEXT PRIMARY KEY,
+			category TEXT,
+			comment TEXT,
+			confirmed INTEGER,
+			first_seen INTEGER,
+			last_seen INTEGER,
+			last_ip TEXT,
+			count INTEGER,
+			expires_at INTEGER
+		);
+		CREATE INDEX IF NOT EXISTS idx_patterns_last_ip ON patterns(last_ip);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create abuse database tables: %w", err)
 	}
 
-	return confidence.(int)
+	// Start cleanup goroutine
+	go func() {
+		for {
+			CleanupAbuseDB()
+			time.Sleep(5 * time.Minute)
+		}
+	}()
+
+	return nil
 }
 
+func CleanupAbuseDB() {
+	now := time.Now().Unix()
+	ipExpire := now - int64(Conf.AbuseIPExpire.Duration.Seconds())
+	abuseDB.Exec("DELETE FROM abuseipdb_cache WHERE updated_at < ?", ipExpire)
+	abuseDB.Exec("DELETE FROM patterns WHERE confirmed = 0 AND expires_at < ?", now)
+}
+
+// AbuseIPDBCheck checks the abuse confidence score for an IP using the database cache.
+func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
+	ipStr := ip.String()
+	var confidence int
+	var updatedAt int64
+
+	// Check DB cache
+	row := abuseDB.QueryRow("SELECT confidence, updated_at FROM abuseipdb_cache WHERE ip = ?", ipStr)
+	err := row.Scan(&confidence, &updatedAt)
+	now := time.Now().Unix()
+	ipExpire := Conf.AbuseIPExpire.Duration.Seconds()
+	cacheValid := err == nil && now-updatedAt < int64(ipExpire)
+
+	if cacheValid {
+		log("AbuseIPDB DB cache hit")
+		return confidence
+	}
+
+	log("AbuseIPDB DB cache miss")
+	apiURL := fmt.Sprintf(
+		"https://api.abuseipdb.com/api/v2/check?key=%s&ipAddress=%s",
+		Conf.AbuseIPDBKey,
+		url.QueryEscape(ipStr),
+	)
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		// fail open
+		confidence = -1
+		_, _ = abuseDB.Exec(`
+			INSERT OR REPLACE INTO abuseipdb_cache (
+				ip,
+				confidence,
+				updated_at
+			) VALUES (?, ?, ?)
+		`, ipStr, confidence, now)
+		log("AbuseIPDB request error:", err)
+		return -1
+	}
+	defer resp.Body.Close()
+
+	var respObj abuseIPDBResp
+	err = json.NewDecoder(resp.Body).Decode(&respObj)
+	if err != nil {
+		confidence = -1
+		_, _ = abuseDB.Exec(`
+			INSERT OR REPLACE INTO abuseipdb_cache (
+				ip,
+				confidence,
+				updated_at
+			) VALUES (?, ?, ?)
+		`, ipStr, confidence, now)
+		log("AbuseIPDB decode error:", err)
+		return -1
+	}
+
+	confidence = respObj.Data.AbuseConfidenceScore
+	_, _ = abuseDB.Exec(`
+		INSERT OR REPLACE INTO abuseipdb_cache (
+			ip,
+			confidence,
+			updated_at
+		) VALUES (?, ?, ?)
+	`, ipStr, confidence, now)
+	return confidence
+}
+
+// AbuseIPDBReport reports an IP for abuse and updates the database cache.
 func AbuseIPDBReport(
 	ip net.IP,
 	pattern KnownAbusePattern,
@@ -96,17 +174,24 @@ func AbuseIPDBReport(
 ) {
 	ipStr := ip.String()
 
-	// BUG(Jon): we should use something like Swap() to avoid a race
-	// condition here, but AbuseIPDB de-bounces for us, to its ok.
-	// https://github.com/golang/go/issues/51972
-	confidence, inCache := abuseIPDBCache.Load(ipStr)
-	// refuse future connections until cache expiry
-	abuseIPDBCache.Store(ipStr, ReportedByUs)
-
-	if inCache && confidence.(int) == ReportedByUs {
+	// Check if already reported
+	var confidence int
+	row := abuseDB.QueryRow("SELECT confidence FROM abuseipdb_cache WHERE ip = ?", ipStr)
+	err := row.Scan(&confidence)
+	if err == nil && confidence == ReportedByUs {
 		log("this IP has already been reported")
 		return
 	}
+
+	// Set cache to reported
+	now := time.Now().Unix()
+	_, _ = abuseDB.Exec(`
+		INSERT OR REPLACE INTO abuseipdb_cache (
+			ip,
+			confidence,
+			updated_at
+		) VALUES (?, ?, ?)
+	`, ipStr, ReportedByUs, now)
 
 	log("reporting", ipStr, "for pattern", pattern.Hash)
 	apiURL := fmt.Sprintf(
@@ -156,71 +241,130 @@ func RecordAbusiveOpen(c Conn) {
 	hash := md5.Sum(buff)
 	hexHash := hex.EncodeToString(hash[:])
 
-	_, alreadyDiscovered := abusePatterns.LoadOrStore(hash, struct{}{})
-	if alreadyDiscovered {
-		c.Log("client sent old pattern:", hexHash)
-		return
-	}
-	c.Log("client sent new pattern:", hexHash)
-
-	filename := filepath.Join(Conf.AbuseRecordPath, hexHash)
-	err = os.WriteFile(filename, buff, 0644)
+	// Check if pattern is confirmed
+	pattern, err := GetPatternByHash(hexHash)
 	if err != nil {
-		c.Log(err)
+		c.Log("db error:", err)
 		return
 	}
-
-	// if this is a known pattern, also send a report
-	pattern, err := CheckAbusiveOpen(buff)
-	if err != nil {
-		c.Log("error checking for abuse pattern matches:", err)
-		return
-	}
-	if pattern != nil {
-		c.Log("pattern is known bad:", pattern.Comment)
+	if pattern != nil && pattern.Confirmed {
+		c.Log("client sent confirmed bad pattern:", hexHash)
 		ip := c.RemoteAddr().(*net.TCPAddr).IP
-		AbuseIPDBReport(ip, *pattern, c.Log)
+		AbuseIPDBReport(ip, KnownAbusePattern{
+			Hash:     pattern.Hash,
+			Category: pattern.Category,
+			Comment:  pattern.Comment,
+		}, c.Log)
+		return
+	}
+
+	// Not confirmed, check IP reputation
+	ip := c.RemoteAddr().(*net.TCPAddr).IP
+	rep := AbuseIPDBCheck(ip, c.Log)
+	if rep >= 90 { // bad reputation
+		c.Log("bad reputation IP", ip.String(), "sent new pattern", hexHash)
+		// Limit unconfirmed patterns per IP
+		count, err := CountUnconfirmedPatternsByIP(ip.String())
+		if err != nil {
+			c.Log("db error:", err)
+			return
+		}
+		if count >= Conf.AbusePatternsPerIP {
+			c.Log("too many unconfirmed patterns from this IP")
+			return
+		}
+		// Insert or update pattern
+		if err := UpsertUnconfirmedPattern(hexHash, ip.String()); err != nil {
+			c.Log("db error:", err)
+		}
 	}
 }
 
 func CheckAbusiveOpen(buff []byte) (*KnownAbusePattern, error) {
-	var patterns []KnownAbusePattern
-	patternsIface := knownBadPatterns.Load()
-	if patternsIface == nil {
-		log, print := NewLog()
-		defer print()
-		log("reading AbusePatternsFile")
-
-		// read in file as TSV
-		contents, err := os.ReadFile(Conf.AbusePatternsFile)
-		if err != nil {
-			return nil, err
-		}
-		lines := strings.Split(string(contents), "\n")
-		for i, line := range lines {
-			fields := strings.SplitN(line, "\t", 3)
-			if len(fields) != 3 {
-				log("expected 3 fields on line", i, "got", len(fields))
-				continue
-			}
-			patterns = append(patterns, KnownAbusePattern{
-				Hash:     fields[0],
-				Category: fields[1],
-				Comment:  fields[2],
-			})
-		}
-		knownBadPatterns.Store(patterns)
-		log("loaded", len(patterns), "known abuse patterns")
-	} else {
-		patterns = patternsIface.([]KnownAbusePattern)
-	}
-
 	hash := md5.Sum(buff)
 	hexHash := hex.EncodeToString(hash[:])
-	for _, pattern := range patterns {
-		if hexHash == pattern.Hash {
-			return &pattern, nil
-		}
+
+	row := abuseDB.QueryRow(`
+		SELECT
+			hash,
+			category,
+			comment
+		FROM patterns
+		WHERE hash = ? AND confirmed = 1
+	`, hexHash)
+	var pattern KnownAbusePattern
+	err := row.Scan(&pattern.Hash, &pattern.Category, &pattern.Comment)
+	if err == sql.ErrNoRows {
+		return nil, nil
 	}
-	return nil, nil
+	if err != nil {
+		return nil, err
+	}
+	return &pattern, nil
+}
+
+// DB helpers for patterns
+func GetPatternByHash(hash string) (*AbusePatternDB, error) {
+	row := abuseDB.QueryRow(`
+		SELECT
+			hash,
+			category,
+			comment,
+			confirmed,
+			first_seen,
+			last_seen,
+			last_ip,
+			count,
+			expires_at
+		FROM patterns
+		WHERE hash = ?
+	`, hash)
+	var p AbusePatternDB
+	var confirmed int
+	err := row.Scan(
+		&p.Hash,
+		&p.Category,
+		&p.Comment,
+		&confirmed,
+		&p.FirstSeen,
+		&p.LastSeen,
+		&p.LastIP,
+		&p.Count,
+		&p.ExpiresAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.Confirmed = confirmed != 0
+	return &p, nil
+}
+
+func CountUnconfirmedPatternsByIP(ip string) (int, error) {
+	row := abuseDB.QueryRow("SELECT COUNT(*) FROM patterns WHERE confirmed = 0 AND last_ip = ?", ip)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func UpsertUnconfirmedPattern(hash, ip string) error {
+	now := time.Now()
+	exp := now.Add(Conf.AbusePatternExpire.Duration)
+	_, err := abuseDB.Exec(`
+		INSERT INTO patterns (
+			hash, category, comment, confirmed, first_seen, last_seen, last_ip, count, expires_at
+		) VALUES (
+			?, '', '', 0, ?, ?, ?, 1, ?
+		)
+		ON CONFLICT(hash) DO UPDATE SET
+			last_seen = excluded.last_seen,
+			last_ip = excluded.last_ip,
+			count = patterns.count + 1,
+			expires_at = excluded.expires_at
+	`, hash, now.Unix(), now.Unix(), ip, exp.Unix())
+	return err
 }

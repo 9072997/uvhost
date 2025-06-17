@@ -43,8 +43,10 @@ var Conf struct {
 	AbuseConfidenceThreshold int
 	AbuseRecordTime          Duration
 	AbuseRecordLength        uint
-	AbuseRecordPath          string
-	AbusePatternsFile        string
+	AbuseDBPath              string
+	AbuseIPExpire            Duration
+	AbusePatternExpire       Duration
+	AbusePatternsPerIP       int
 }
 
 func LoadConfig(filename string) error {

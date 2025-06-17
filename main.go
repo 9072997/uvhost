@@ -6,6 +6,7 @@ func main() {
 		panic(err)
 	}
 
+	StartAbuseDB()
 	StartDNS()
 	StartRecurse()
 	go ServeInfo()
