@@ -40,6 +40,10 @@
 			padding: 0;
 			font-size: 1em;
 		}
+
+		tr.confirmed {
+			background-color: #ffe0e6;
+		}
 	</style>
 </head>
 
@@ -53,12 +57,12 @@
 			<th>Details</th>
 		</tr>
 		{{range .}}
-		<tr>
+		<tr id="{{.Hash}}"{{if .Confirmed}} class="confirmed"{{end}}>
 			<td>
 				<h2>{{.Hash}}</h2>
 				<strong>First Seen:</strong> {{.FirstSeen}}<br>
 				<strong>Last Seen:</strong> {{.LastSeen}}<br>
-				<strong>Last IP:</strong> {{.LastIP}}<br>
+				<strong>Last IP:</strong> <a href="https://www.abuseipdb.com/check/{{.LastIP}}">{{.LastIP}}</a><br>
 				<strong>Last Port:</strong> {{.LastPort}}<br>
 				<strong>Count:</strong> {{.Count}}<br>
 				<a href="/hpd/{{.Hash}}">Dissect</a>
@@ -136,6 +140,8 @@
 				}
 			});
 		});
+		
+		window.location.hash = '';
 	</script>
 </body>
 

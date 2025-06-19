@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -268,5 +269,6 @@ func editAbusePattern(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/abuse", http.StatusSeeOther)
+	u := "/abuse#" + url.QueryEscape(hash)
+	http.Redirect(w, r, u, http.StatusSeeOther)
 }
