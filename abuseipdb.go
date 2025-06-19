@@ -19,7 +19,7 @@ import (
 
 const ReportedByUs = 101 // confidence score
 
-var abuseDB *sql.DB
+var AbuseDB *sql.DB
 
 type AbusePatternDB struct {
 	Hash      string
@@ -57,11 +57,11 @@ type abuseIPDBResp struct {
 
 func StartAbuseDB() error {
 	var err error
-	abuseDB, err = sql.Open("sqlite", Conf.AbuseDBPath)
+	AbuseDB, err = sql.Open("sqlite", Conf.AbuseDBPath)
 	if err != nil {
 		return fmt.Errorf("failed to open abuse database: %w", err)
 	}
-	_, err = abuseDB.Exec(`
+	_, err = AbuseDB.Exec(`
 		CREATE TABLE IF NOT EXISTS abuseipdb_cache (
 			ip TEXT PRIMARY KEY,
 			confidence INTEGER,
@@ -100,8 +100,8 @@ func StartAbuseDB() error {
 func CleanupAbuseDB() {
 	now := time.Now().Unix()
 	ipExpire := now - int64(Conf.AbuseIPExpire.Duration.Seconds())
-	abuseDB.Exec("DELETE FROM abuseipdb_cache WHERE updated_at < ?", ipExpire)
-	abuseDB.Exec("DELETE FROM patterns WHERE confirmed = 0 AND expires_at < ?", now)
+	AbuseDB.Exec("DELETE FROM abuseipdb_cache WHERE updated_at < ?", ipExpire)
+	AbuseDB.Exec("DELETE FROM patterns WHERE confirmed = 0 AND expires_at < ?", now)
 }
 
 // AbuseIPDBCheck checks the abuse confidence score for an IP using the database cache.
@@ -111,7 +111,7 @@ func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
 	var updatedAt int64
 
 	// Check DB cache
-	row := abuseDB.QueryRow("SELECT confidence, updated_at FROM abuseipdb_cache WHERE ip = ?", ipStr)
+	row := AbuseDB.QueryRow("SELECT confidence, updated_at FROM abuseipdb_cache WHERE ip = ?", ipStr)
 	err := row.Scan(&confidence, &updatedAt)
 	now := time.Now().Unix()
 	ipExpire := Conf.AbuseIPExpire.Duration.Seconds()
@@ -132,7 +132,7 @@ func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
 	if err != nil {
 		// fail open
 		confidence = -1
-		_, _ = abuseDB.Exec(`
+		_, _ = AbuseDB.Exec(`
 			INSERT OR REPLACE INTO abuseipdb_cache (
 				ip,
 				confidence,
@@ -148,7 +148,7 @@ func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
 	err = json.NewDecoder(resp.Body).Decode(&respObj)
 	if err != nil {
 		confidence = -1
-		_, _ = abuseDB.Exec(`
+		_, _ = AbuseDB.Exec(`
 			INSERT OR REPLACE INTO abuseipdb_cache (
 				ip,
 				confidence,
@@ -160,7 +160,7 @@ func AbuseIPDBCheck(ip net.IP, log func(...interface{})) int {
 	}
 
 	confidence = respObj.Data.AbuseConfidenceScore
-	_, _ = abuseDB.Exec(`
+	_, _ = AbuseDB.Exec(`
 		INSERT OR REPLACE INTO abuseipdb_cache (
 			ip,
 			confidence,
@@ -180,7 +180,7 @@ func AbuseIPDBReport(
 
 	// Check if already reported
 	var confidence int
-	row := abuseDB.QueryRow("SELECT confidence FROM abuseipdb_cache WHERE ip = ?", ipStr)
+	row := AbuseDB.QueryRow("SELECT confidence FROM abuseipdb_cache WHERE ip = ?", ipStr)
 	err := row.Scan(&confidence)
 	if err == nil && confidence == ReportedByUs {
 		log("this IP has already been reported")
@@ -189,7 +189,7 @@ func AbuseIPDBReport(
 
 	// Set cache to reported
 	now := time.Now().Unix()
-	_, _ = abuseDB.Exec(`
+	_, _ = AbuseDB.Exec(`
 		INSERT OR REPLACE INTO abuseipdb_cache (
 			ip,
 			confidence,
@@ -292,7 +292,7 @@ func CheckAbusiveOpen(buff []byte) (*KnownAbusePattern, error) {
 	hash := md5.Sum(buff)
 	hexHash := hex.EncodeToString(hash[:])
 
-	row := abuseDB.QueryRow(`
+	row := AbuseDB.QueryRow(`
 		SELECT
 			hash,
 			category,
@@ -313,7 +313,7 @@ func CheckAbusiveOpen(buff []byte) (*KnownAbusePattern, error) {
 
 // DB helpers for patterns
 func GetPatternByHash(hash string) (*AbusePatternDB, error) {
-	row := abuseDB.QueryRow(`
+	row := AbuseDB.QueryRow(`
 		SELECT
 			hash,
 			category,
@@ -357,7 +357,7 @@ func GetPatternByHash(hash string) (*AbusePatternDB, error) {
 }
 
 func CountUnconfirmedPatternsByIP(ip string) (int, error) {
-	row := abuseDB.QueryRow("SELECT COUNT(*) FROM patterns WHERE confirmed = 0 AND last_ip = ?", ip)
+	row := AbuseDB.QueryRow("SELECT COUNT(*) FROM patterns WHERE confirmed = 0 AND last_ip = ?", ip)
 	var count int
 	if err := row.Scan(&count); err != nil {
 		return 0, err
@@ -368,7 +368,7 @@ func CountUnconfirmedPatternsByIP(ip string) (int, error) {
 func UpsertUnconfirmedPattern(hash string, ip string, port int, data []byte) error {
 	now := time.Now()
 	exp := now.Add(Conf.AbusePatternExpire.Duration)
-	_, err := abuseDB.Exec(
+	_, err := AbuseDB.Exec(
 		`
 			INSERT INTO patterns (
 				hash,

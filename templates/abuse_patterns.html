@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Abuse Patterns</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+		}
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+		}
+
+		th,
+		td {
+			padding: 8px;
+			text-align: left;
+			overflow: hidden;
+			max-width: 50vw;
+		}
+
+		th {
+			background-color: #f2f2f2;
+		}
+
+		pre {
+			overflow: scroll;
+			height: 100%;
+			margin: 0;
+		}
+
+		form {
+			display: inline;
+		}
+
+		h2 {
+			margin: 0;
+			padding: 0;
+			font-size: 1em;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Abuse Patterns</h1>
+	<table border="1">
+		<tr>
+			<th>Info</th>
+			<th>Data (ASCII)</th>
+			<th>Data (Hex)</th>
+			<th>Details</th>
+		</tr>
+		{{range .}}
+		<tr>
+			<td>
+				<h2>{{.Hash}}</h2>
+				<strong>First Seen:</strong> {{.FirstSeen}}<br>
+				<strong>Last Seen:</strong> {{.LastSeen}}<br>
+				<strong>Last IP:</strong> {{.LastIP}}<br>
+				<strong>Last Port:</strong> {{.LastPort}}<br>
+				<strong>Count:</strong> {{.Count}}<br>
+				<a href="/hpd/{{.Hash}}">Dissect</a>
+			</td>
+			<td>
+				<pre>{{.Data}}</pre>
+			</td>
+			<td>
+				<pre>{{.HexData}}</pre>
+			</td>
+			<td>
+				<form method="post">
+					<input type="hidden" name="hash" value="{{.Hash}}">
+					<label for="category_select">Category:</label>
+					<br>
+					<select name="category_select" multiple size="8">
+						<option value="1">1 - DNS Compromise</option>
+						<option value="2">2 - DNS Poisoning</option>
+						<option value="3">3 - Fraud Orders</option>
+						<option value="4">4 - DDoS Attack</option>
+						<option value="5">5 - FTP Brute-Force</option>
+						<option value="6">6 - Ping of Death</option>
+						<option value="7">7 - Phishing</option>
+						<option value="8">8 - Fraud VoIP</option>
+						<option value="9">9 - Open Proxy</option>
+						<option value="10">10 - Web Spam</option>
+						<option value="11">11 - Email Spam</option>
+						<option value="12">12 - Blog Spam</option>
+						<option value="13">13 - VPN IP</option>
+						<option value="14">14 - Port Scan</option>
+						<option value="15">15 - Hacking</option>
+						<option value="16">16 - SQL Injection</option>
+						<option value="17">17 - Spoofing</option>
+						<option value="18">18 - Brute-Force</option>
+						<option value="19">19 - Bad Web Bot</option>
+						<option value="20">20 - Exploited Host</option>
+						<option value="21">21 - Web App Attack</option>
+						<option value="22">22 - SSH</option>
+						<option value="23">23 - IoT Targeted</option>
+					</select>
+					<input type="hidden" name="category" value="{{.Category}}">
+					<br>
+
+					<label for="comment">Comment:</label>
+					<input type="text" name="comment" value="{{.Comment}}">
+					<br>
+
+					<label for="confirmed">Confirmed:</label>
+					<input type="checkbox" name="confirmed" {{if .Confirmed}}checked{{end}}>
+					<br>
+
+					<input type="submit" value="Save">
+				</form>
+			</td>
+		</tr>
+		{{end}}
+	</table>
+	<script>
+		// For each form, set selected options and handle submit
+		window.addEventListener('DOMContentLoaded', function () {
+			document.querySelectorAll('form').forEach(function (form) {
+				var select = form.querySelector('select[name="category_select"]');
+				var hidden = form.querySelector('input[name="category"]');
+				if (select && hidden) {
+					// Pre-select options
+					var selected = (hidden.value || '').split(',').map(function (s) { return s.trim(); });
+					Array.from(select.options).forEach(function (opt) {
+						if (selected.includes(opt.value)) opt.selected = true;
+					});
+					// On submit, update hidden input
+					form.addEventListener('submit', function (e) {
+						var values = Array.from(select.selectedOptions).map(function (opt) { return opt.value; });
+						hidden.value = values.join(',');
+					});
+				}
+			});
+		});
+	</script>
+</body>
+
+</html>
