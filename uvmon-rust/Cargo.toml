@@ -1,0 +1,20 @@
+[package]
+name = "uvmon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0", features = ["full"] }
+futures-util = "0.3"
+bytes = "1"
+http-body-util = "0.1"
+tower = { version = "0.4", features = ["util"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

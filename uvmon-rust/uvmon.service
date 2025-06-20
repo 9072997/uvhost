@@ -1,0 +1,15 @@
+[Unit]
+Description=uvhost monitor
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=300
+DynamicUser=yes
+ExecStart=/usr/local/bin/uvmon
+CPUQuota=5%
+MemoryMax=32M
+
+[Install]
+WantedBy=multi-user.target
