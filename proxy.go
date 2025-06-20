@@ -2,18 +2,10 @@ package main
 
 import (
 	"net"
-	"strconv"
-
-	tproxy "github.com/LiamHaworth/go-tproxy"
 )
 
-func Proxy() {
-	listenAddr := parseAddr(Conf.ProxyListenAddr)
-	if listenAddr == nil {
-		panic("failed to parse listen address")
-	}
-
-	listener, err := tproxy.ListenTCP("tcp", listenAddr)
+func Proxy(tf *TableFlip) {
+	listener, err := tf.ListenTransparent("tcp", Conf.ProxyListenAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -24,7 +16,8 @@ func Proxy() {
 			Log(err)
 			continue
 		}
-		go handle(NewConn(conn.(*tproxy.Conn).TCPConn))
+		tcpConn := conn.(*net.TCPConn)
+		go handle(NewConn(tcpConn))
 	}
 }
 
@@ -60,23 +53,4 @@ func handle(c Conn) {
 	// this will block as long as the connection is open. When it closes it
 	// will close both ends of the connection.
 	c.Connect(backend)
-}
-
-func parseAddr(addrStr string) *net.TCPAddr {
-	ipStr, portStr, err := net.SplitHostPort(addrStr)
-	if err != nil {
-		return nil
-	}
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return nil
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil
-	}
-	return &net.TCPAddr{
-		IP:   ip,
-		Port: port,
-	}
 }

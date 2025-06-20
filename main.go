@@ -6,9 +6,13 @@ func main() {
 		panic(err)
 	}
 
+	tf := SetupTableFlip()
+
 	StartAbuseDB()
-	StartDNS()
-	StartRecurse()
-	go ServeInfo()
-	Proxy()
+	StartDNS(tf)
+	StartRecurse(tf)
+	go ServeInfo(tf)
+	go Proxy(tf)
+
+	tf.Run()
 }

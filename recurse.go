@@ -27,12 +27,12 @@ type nsResp struct {
 	authoritative bool
 }
 
-func StartRecurse() {
-	go serveRecurseMode("udp")
-	go serveRecurseMode("tcp")
+func StartRecurse(tf *TableFlip) {
+	go serveRecurseMode("udp", tf)
+	go serveRecurseMode("tcp", tf)
 }
 
-func serveRecurseMode(mode string) {
+func serveRecurseMode(mode string, tf *TableFlip) {
 	mux := dns.NewServeMux()
 
 	// attach request handler func
@@ -41,14 +41,32 @@ func serveRecurseMode(mode string) {
 	// also answer requests for the main zone
 	mux.HandleFunc(Conf.DNSZone, HandleMainZone)
 
-	func() {
-		err := (&dns.Server{
-			Addr:    net.JoinHostPort(Conf.PublicIPv4Addr, "53"),
-			Net:     mode,
-			Handler: mux,
-		}).ListenAndServe()
-		panic(err)
-	}()
+	listenAddr := net.JoinHostPort(Conf.PublicIPv4Addr, "53")
+	var s dns.Server
+	switch mode {
+	case "udp":
+		l, err := tf.ListenPacket(mode, listenAddr)
+		if err != nil {
+			panic(fmt.Sprintf("failed to listen on UDP: %v", err))
+		}
+		s = dns.Server{
+			PacketConn: l,
+			Handler:    mux,
+			UDPSize:    int(Conf.DNSBufferSize),
+		}
+	case "tcp":
+		l, err := tf.Listen("tcp", listenAddr)
+		if err != nil {
+			panic(fmt.Sprintf("failed to listen on TCP: %v", err))
+		}
+		s = dns.Server{
+			Listener: l,
+			Handler:  mux,
+		}
+	}
+
+	err := s.ActivateAndServe()
+	panic(err)
 }
 
 func lookupNS(
@@ -300,7 +318,7 @@ func (mode recurseMode) handle(resp dns.ResponseWriter, req *dns.Msg) {
 				dialAddr := fmt.Sprintf("[%s]:53", ip)
 				mFromBackend, _, err := (&dns.Client{
 					Net:     string(mode),
-					UDPSize: Conf.RecurseBufferSize,
+					UDPSize: Conf.DNSBufferSize,
 				}).ExchangeContext(ctx, req, dialAddr)
 				if err == nil {
 					m = mFromBackend

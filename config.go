@@ -30,7 +30,7 @@ var Conf struct {
 	RecurseConcurrencyLimit  int
 	RecurseMaxDepth          int
 	RecurseServer            string
-	RecurseBufferSize        uint16
+	DNSBufferSize            uint16
 	MappedPrefix             string
 	MaxConnectTime           Duration
 	MaxIdentifyTime          Duration
@@ -51,6 +51,7 @@ var Conf struct {
 	AbuseSavePatternAfter    int
 	AuthUsername             string
 	AuthPassword             string
+	PIDFile                  string
 }
 
 func LoadConfig(filename string) error {

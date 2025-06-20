@@ -2,7 +2,7 @@ package main
 
 import (
 	_ "embed"
-	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/gomarkdown/markdown"
@@ -18,13 +18,21 @@ func (h staticHTML) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 //go:embed README.md
 var readmeMD []byte
 
-func ServeInfo() {
+func ServeInfo(tf *TableFlip) {
 	readmeHTML := markdown.ToHTML(readmeMD, nil, nil)
 	mux := http.NewServeMux()
 	mux.Handle("/", staticHTML(readmeHTML))
 	mux.Handle("/abuseipdb-verification.html", staticHTML([]byte(Conf.AbuseIPDBVerification)))
 	mux.Handle("/abuse", http.HandlerFunc(handleAbuseUI))
 	mux.Handle("/hpd/", http.HandlerFunc(handleHPD))
-	listenAddr := fmt.Sprintf("[%s]:http", Conf.PublicIPv6Addr)
-	http.ListenAndServe(listenAddr, mux)
+
+	listenAddr := net.JoinHostPort(Conf.PublicIPv6Addr, "http")
+	l, err := tf.Listen("tcp", listenAddr)
+	if err != nil {
+		panic(err)
+	}
+	err = http.Serve(l, mux)
+	if err != nil {
+		panic(err)
+	}
 }

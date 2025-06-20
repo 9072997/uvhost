@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html/template"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,11 +32,12 @@ func handleAbuseUI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		serveAbusePatterns(w)
-	} else if r.Method == http.MethodPost {
+	case http.MethodPost:
 		editAbusePattern(w, r)
-	} else {
+	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
@@ -61,7 +61,7 @@ func handleHPD(w http.ResponseWriter, r *http.Request) {
 		WHERE hash = ?
 	`, hash).Scan(&lastIP, &lastPort, &data)
 	if err != nil {
-		log.Println("Error querying database:", err)
+		Log("Error querying database:", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -157,7 +157,7 @@ func serveAbusePatterns(w http.ResponseWriter) {
 		LIMIT 1000
 	`)
 	if err != nil {
-		log.Println("Error querying database:", err)
+		Log("Error querying database:", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -196,7 +196,7 @@ func serveAbusePatterns(w http.ResponseWriter) {
 			&confirmed,
 		)
 		if err != nil {
-			log.Println("Error scanning row:", err)
+			Log("Error scanning row:", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
@@ -248,7 +248,7 @@ func serveAbusePatterns(w http.ResponseWriter) {
 
 	templateErr := templates.ExecuteTemplate(w, "abuse_patterns.html", patterns)
 	if templateErr != nil {
-		log.Println("Error executing template:", templateErr)
+		Log("Error executing template:", templateErr)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -264,7 +264,7 @@ func editAbusePattern(w http.ResponseWriter, r *http.Request) {
 		category, comment, confirmed, hash,
 	)
 	if err != nil {
-		log.Println("Error updating database:", err)
+		Log("Error updating database:", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

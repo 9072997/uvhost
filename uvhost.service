@@ -8,6 +8,8 @@ Restart=always
 RestartSec=5
 ExecStartPre=/usr/local/bin/uvhost-netsetup.sh
 ExecStart=/usr/local/bin/uvhost
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile=/var/run/uvhost.pid
 
 [Install]
 WantedBy=multi-user.target

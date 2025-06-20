@@ -13,27 +13,43 @@ import (
 // just to shorten things
 var eq = strings.EqualFold
 
-func StartDNS() {
+func StartDNS(tf *TableFlip) {
 	mux := dns.NewServeMux()
 
 	// attach request handler func
 	mux.HandleFunc(Conf.DNSZone, HandleMainZone)
 
+	// setup TableFlip listeners
+	listenAddr := net.JoinHostPort(Conf.PublicIPv6Addr, "53")
+	udp, err := tf.ListenPacket("udp", listenAddr)
+	if err != nil {
+		panic(fmt.Sprintf("failed to listen on UDP: %v", err))
+	}
+	tcp, err := tf.Listen("tcp", listenAddr)
+	if err != nil {
+		panic(fmt.Sprintf("failed to listen on TCP: %v", err))
+	}
+
 	go func() {
-		err := (&dns.Server{
-			Addr:    net.JoinHostPort(Conf.PublicIPv6Addr, "53"),
-			Net:     "udp",
-			Handler: mux,
-		}).ListenAndServe()
-		panic(err)
+		server := &dns.Server{
+			PacketConn: udp,
+			Handler:    mux,
+			UDPSize:    int(Conf.DNSBufferSize),
+		}
+		err := server.ActivateAndServe()
+		if err != nil {
+			panic(err)
+		}
 	}()
 	go func() {
-		err := (&dns.Server{
-			Addr:    net.JoinHostPort(Conf.PublicIPv6Addr, "53"),
-			Net:     "tcp",
-			Handler: mux,
-		}).ListenAndServe()
-		panic(err)
+		server := &dns.Server{
+			Listener: tcp,
+			Handler:  mux,
+		}
+		err := server.ActivateAndServe()
+		if err != nil {
+			panic(err)
+		}
 	}()
 }
 
