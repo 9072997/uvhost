@@ -300,7 +300,7 @@ func (mode recurseMode) handle(resp dns.ResponseWriter, req *dns.Msg) {
 	m := new(dns.Msg).SetReply(req)
 
 	// normal DNS query packets only ever contain a single question, and
-	// "who should we forward to" would get complex anr risky if those
+	// "who should we forward to" would get complex and risky if those
 	// questions should go to different servers, so we reject packets with
 	// multiple questions.
 	if req.Opcode == dns.OpcodeQuery && len(req.Question) == 1 {
